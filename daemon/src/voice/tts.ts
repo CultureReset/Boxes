@@ -11,13 +11,17 @@ import path from "node:path";
  * one voice for the TV, for a phone call, and for a text read aloud, so the
  * business sounds like one thing no matter which door somebody came in.
  *
- * Local first. Piper is a 60MB binary and a voice file; it runs on a mini-PC
- * with no GPU and no network. Kokoro is better and wants a GPU, so it is a
- * setting: point NODEOS_TTS_URL at it and it is used, leave it unset and the
- * box still talks. Either way nothing leaves the machine.
+ * A BINARY ON DISK, NOT A SERVICE. Piper is 60MB and a voice file. It takes a
+ * sentence on stdin and hands back a WAV. There is no server, no port, no
+ * request, and nothing to be down. Any other engine that works the same way
+ * goes in NODEOS_TTS_CMD and is used ahead of Piper.
+ *
+ * An HTTP endpoint is supported and is last. It is there for the bench, where
+ * an engine happens to ship as a container, and for a cloud voice somebody
+ * pays for later. Nothing ships pointed at one.
  */
 
-export type Engine = "kokoro" | "piper" | "espeak" | "none";
+export type Engine = "command" | "piper" | "espeak" | "http" | "none";
 
 export interface Speech {
   /** 16-bit PCM WAV. Callers stream it or hand it to a player. */
@@ -29,56 +33,61 @@ export interface Speech {
 const VOICE = process.env.NODEOS_TTS_VOICE ?? "/usr/share/piper-voices/en_US-amy-medium.onnx";
 
 /**
- * An OpenAI-compatible speech endpoint — Kokoro-FastAPI is the one this was
- * written against. Unset means local binaries only; the box never reaches for
- * a service nobody asked for.
+ * Your own engine. A command line; the sentence arrives on stdin and the WAV
+ * is expected at the path substituted for {out}. Split on whitespace and run
+ * directly — no shell, so nothing in a caller's sentence can reach one.
+ *
+ *   NODEOS_TTS_CMD="kokoro-onnx --voice af_sky --out {out}"
  */
+const CMD = (process.env.NODEOS_TTS_CMD ?? "").trim();
+const CMD_RATE = Number(process.env.NODEOS_TTS_CMD_RATE ?? 24_000);
+
+/** An OpenAI-shaped speech endpoint. Unset on a shipped box. */
 const TTS_URL = process.env.NODEOS_TTS_URL ?? "";
 const TTS_VOICE = process.env.NODEOS_TTS_REMOTE_VOICE ?? "af_sky";
 const TTS_MODEL = process.env.NODEOS_TTS_MODEL ?? "kokoro";
 const TTS_TIMEOUT_MS = 30_000;
 
-let cached: Engine | null = null;
+let cached: Engine[] | null = null;
 
-/** Which voice this machine actually has. Checked once. */
-export async function engine(): Promise<Engine> {
+/** Every engine this machine has, best first. Checked once. */
+async function engines(): Promise<Engine[]> {
   if (cached) return cached;
-  if (TTS_URL) cached = "kokoro";
-  else if (await has("piper")) cached = "piper";
-  else if (await has("espeak-ng")) cached = "espeak";
-  else cached = "none";
-  return cached;
+  const found: Engine[] = [];
+  if (CMD) found.push("command");
+  if (await has("piper")) found.push("piper");
+  if (await has("espeak-ng")) found.push("espeak");
+  if (TTS_URL) found.push("http");
+  cached = found;
+  return found;
 }
 
-/** A local engine, for when the configured remote one is not answering. */
-async function localEngine(): Promise<Engine> {
-  if (await has("piper")) return "piper";
-  if (await has("espeak-ng")) return "espeak";
-  return "none";
+/** What it will use if asked right now. */
+export async function engine(): Promise<Engine> {
+  return (await engines())[0] ?? "none";
 }
 
-async function kokoro(clean: string): Promise<Speech | null> {
-  const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), TTS_TIMEOUT_MS);
+async function viaCommand(clean: string): Promise<Speech | null> {
+  const parts = CMD.split(/\s+/).filter(Boolean);
+  if (!parts.length) return null;
+  const dir = await mkdtemp(path.join(tmpdir(), "nodeos-tts-"));
+  const out = path.join(dir, "out.wav");
   try {
-    const res = await fetch(`${TTS_URL.replace(/\/$/, "")}/audio/speech`, {
-      method: "POST",
-      signal: ctrl.signal,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: clean, response_format: "wav" }),
-    });
-    if (!res.ok) return null;
-    const wav = Buffer.from(await res.arrayBuffer());
-    if (wav.length < 64) return null;
-    return { wav, engine: "kokoro", sampleRate: 24_000 };
+    const r = await run(
+      parts[0]!,
+      parts.slice(1).map((a) => a.replace("{out}", out)),
+      { timeout: 30_000, input: clean },
+    );
+    if (!r.ok) return null;
+    return { wav: await readFile(out), engine: "command", sampleRate: CMD_RATE };
   } catch {
     return null;
   } finally {
-    clearTimeout(timer);
+    await rm(dir, { recursive: true, force: true });
   }
 }
 
-async function piper(clean: string): Promise<Speech | null> {
+async function viaPiper(clean: string): Promise<Speech | null> {
   // Piper reads the sentence on stdin and writes a WAV on stdout.
   return new Promise((resolve) => {
     const p = spawn("piper", ["--model", VOICE, "--output_file", "-"], { stdio: ["pipe", "pipe", "ignore"] });
@@ -92,11 +101,12 @@ async function piper(clean: string): Promise<Speech | null> {
   });
 }
 
-async function espeak(clean: string): Promise<Speech | null> {
+async function viaEspeak(clean: string): Promise<Speech | null> {
   const dir = await mkdtemp(path.join(tmpdir(), "nodeos-tts-"));
   const out = path.join(dir, "out.wav");
   try {
-    await run("espeak-ng", ["-w", out, "-s", "165", clean], { timeout: 20_000 });
+    const r = await run("espeak-ng", ["-w", out, "-s", "165", clean], { timeout: 20_000 });
+    if (!r.ok) return null;
     return { wav: await readFile(out), engine: "espeak", sampleRate: 22_050 };
   } catch {
     return null;
@@ -105,10 +115,31 @@ async function espeak(clean: string): Promise<Speech | null> {
   }
 }
 
+async function viaHttp(clean: string): Promise<Speech | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TTS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${TTS_URL.replace(/\/$/, "")}/audio/speech`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: clean, response_format: "wav" }),
+    });
+    if (!res.ok) return null;
+    const wav = Buffer.from(await res.arrayBuffer());
+    return wav.length < 64 ? null : { wav, engine: "http", sampleRate: 24_000 };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 async function render(e: Engine, clean: string): Promise<Speech | null> {
-  if (e === "kokoro") return kokoro(clean);
-  if (e === "piper") return piper(clean);
-  if (e === "espeak") return espeak(clean);
+  if (e === "command") return viaCommand(clean);
+  if (e === "piper") return viaPiper(clean);
+  if (e === "espeak") return viaEspeak(clean);
+  if (e === "http") return viaHttp(clean);
   return null;
 }
 
@@ -116,15 +147,12 @@ export async function speak(text: string): Promise<Speech | null> {
   const clean = text.replace(/\s+/g, " ").trim().slice(0, 2000);
   if (!clean) return null;
 
-  const e = await engine();
-  const first = await render(e, clean);
-  if (first) return first;
-
-  // A container that is down, restarting or out of VRAM must not take the
-  // voice with it. Fall back to whatever is on disk and keep talking.
-  if (e === "kokoro") {
-    const l = await localEngine();
-    if (l !== "none") return render(l, clean);
+  // A missing voice file, a model that will not load, a container that is
+  // restarting — none of them are allowed to take the voice with them. Try the
+  // next one down until something talks.
+  for (const e of await engines()) {
+    const s = await render(e, clean);
+    if (s) return s;
   }
   return null;
 }

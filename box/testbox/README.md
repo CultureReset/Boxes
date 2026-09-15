@@ -50,11 +50,24 @@ nothing above will help and it is a driver problem first.
 3. **`git clone https://github.com`** appears twice with the repo path missing.
 4. **The Kokoro GPU image is a CUDA image.** `kokoro-fastapi-gpu` will not run
    on this card. Use `kokoro-fastapi-cpu`; Kokoro is 82M parameters and keeps
-   up on CPU for single-caller use.
+   up on CPU for single-caller use. Better still, skip the container — the same
+   weights run as a plain local binary, see below.
 
 Also: "OpenJarvis" in that text is not the Stanford project of a similar name
 that your own documents reference, and I could not verify "Rakazo" as anything
 at all. Neither is load-bearing — nothing here needs them.
+
+## The voice does not need a server
+
+`NODEOS_TTS_CMD` takes a command line: the sentence goes in on stdin, the WAV
+comes out at whatever path is substituted for `{out}`. Piper works that way and
+is the default; anything else that does is a drop-in.
+
+    NODEOS_TTS_CMD="kokoro-onnx --voice af_sky --out {out}"
+
+Nothing is listening, nothing is published, and there is nothing to be down.
+`NODEOS_TTS_URL` still exists and is tried last, for the case where an engine
+only ships as a container. The shipped box leaves it unset.
 
 ## Bring it up
 
@@ -102,5 +115,6 @@ Add `http://100.x.y.z:7770` to the iPhone home screen and it opens like an app.
 This is the bench. The shipped box has no Docker on it, runs Piper rather than
 Kokoro, and reaches nothing on the network but the platform. What carries over
 is the shape: the router answers what it recognises, the model only chooses and
-phrases, and the figures come from a capability that actually ran. Changing the
+phrases, the figures come from a capability that actually ran, and the voice is
+a binary rather than a service. Changing the
 engine changes none of that — which is the point of the env vars.
