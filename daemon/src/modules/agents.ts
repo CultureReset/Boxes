@@ -1,6 +1,7 @@
 import { readFile, stat } from "node:fs/promises";
 import path from "node:path";
 import { has, stream } from "../exec.js";
+import * as llm from "../voice/llm.js";
 import { HOME } from "../paths.js";
 import { createJob, appendLine, finishJob } from "./jobs.js";
 import { answer } from "../platform/answer.js";
@@ -10,9 +11,16 @@ import { activeWorld } from "./worlds.js";
 import type { Job } from "../types.js";
 
 /**
- * NODE does not ship a model of its own. It drives whichever coding agent CLI
- * the user already has (the same set Omarchy supports) in headless mode and
- * streams the answer back into the shell. No terminal is ever shown.
+ * Where an agent's words come from.
+ *
+ * Two kinds. The local model on this machine — Ollama, llama.cpp, whatever is
+ * answering on NODEOS_LLM_URL — needs nothing installed, costs nothing per
+ * question and works with the network unplugged. Or a coding agent CLI the
+ * owner already has, in headless mode, which is better at code and is not
+ * local. No terminal is ever shown either way.
+ *
+ * The workforce is the same nineteen specialists on either one. The split is in
+ * the brief and the allowed scope, not in the engine.
  */
 export interface AgentProvider {
   id: string;
@@ -20,6 +28,8 @@ export interface AgentProvider {
   installed: boolean;
   isDefault: boolean;
 }
+
+export const LOCAL_PROVIDER = "local";
 
 const PROVIDERS: Array<{ id: string; name: string; bin: string; args: (prompt: string) => string[] }> = [
   { id: "claude", name: "Claude Code", bin: "claude", args: (p) => ["-p", p, "--output-format", "text"] },
@@ -42,8 +52,16 @@ export async function listProviders(): Promise<AgentProvider[]> {
   const def = await defaultAgentId();
   const out: AgentProvider[] = [];
   for (const p of PROVIDERS) out.push({ id: p.id, name: p.name, installed: await has(p.bin), isDefault: p.id === def });
+  out.push({
+    id: LOCAL_PROVIDER,
+    name: `On this machine (${process.env.NODEOS_LLM_MODEL ?? "qwen2.5:3b"})`,
+    installed: await llm.available(),
+    isDefault: def === LOCAL_PROVIDER,
+  });
   if (!out.some((p) => p.isDefault)) {
-    const first = out.find((p) => p.installed);
+    // Nothing chosen: prefer an installed CLI, but the local model means the
+    // workforce still works on a box with nothing else on it.
+    const first = out.find((p) => p.installed && p.id !== LOCAL_PROVIDER) ?? out.find((p) => p.installed);
     if (first) first.isDefault = true;
   }
   return out;
@@ -148,11 +166,18 @@ export async function ask(prompt: string, persona = "auto", providerId?: string,
         }
         finishJob(job, true);
       } else {
-        appendLine(job, "No AI agent is installed yet. Open the App Store and add Claude Code, Codex or OpenCode.");
+        appendLine(job, "No agent is available. Start the local model, or open the App Store and add Claude Code, Codex or OpenCode.");
         finishJob(job, false);
       }
       return;
     }
+    if (provider.id === LOCAL_PROVIDER) {
+      const spoke = await llm.converse(personaDef.system, prompt, (line) => appendLine(job, line));
+      if (!spoke) appendLine(job, "The local model stopped answering. Check that it is running.");
+      finishJob(job, spoke);
+      return;
+    }
+
     const def = PROVIDERS.find((p) => p.id === provider.id)!;
     const fullPrompt = `${personaDef.system}\n\nUser: ${prompt}`;
     const work = path.join(HOME, "Work");

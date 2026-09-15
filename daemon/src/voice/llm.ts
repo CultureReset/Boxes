@@ -60,6 +60,81 @@ export async function available(): Promise<boolean> {
   }
 }
 
+/**
+ * A long-form answer, streamed a line at a time.
+ *
+ * This is the other contract. `choose` and `phrase` exist so the box can answer
+ * a caller without inventing anything; this one is a general assistant the
+ * owner is talking to on purpose, and it is allowed to think out loud. It is
+ * still the same local model on the same machine.
+ *
+ * Returns false when nothing is listening, so the caller can say so plainly
+ * rather than hanging.
+ */
+export async function converse(
+  system: string,
+  user: string,
+  onLine: (line: string) => void,
+  signal?: AbortSignal,
+): Promise<boolean> {
+  let res: Response;
+  try {
+    res = await fetch(`${BASE.replace(/\/$/, "")}/chat/completions`, {
+      method: "POST",
+      signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        model: MODEL,
+        messages: [
+          { role: "system", content: system },
+          { role: "user", content: user },
+        ],
+        temperature: 0.3,
+        stream: true,
+      }),
+    });
+  } catch {
+    return false;
+  }
+  if (!res.ok || !res.body) return false;
+
+  const reader = res.body.getReader();
+  const decoder = new TextDecoder();
+  let buf = "";   // undelivered SSE bytes
+  let line = "";  // the sentence being assembled
+
+  const take = (text: string) => {
+    line += text;
+    let nl: number;
+    while ((nl = line.indexOf("\n")) >= 0) {
+      onLine(line.slice(0, nl));
+      line = line.slice(nl + 1);
+    }
+  };
+
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    buf += decoder.decode(value, { stream: true });
+    const events = buf.split("\n");
+    buf = events.pop() ?? "";
+    for (const ev of events) {
+      if (!ev.startsWith("data:")) continue;
+      const payload = ev.slice(5).trim();
+      if (!payload || payload === "[DONE]") continue;
+      try {
+        const j = JSON.parse(payload) as { choices?: Array<{ delta?: { content?: string } }> };
+        const bit = j.choices?.[0]?.delta?.content;
+        if (bit) take(bit);
+      } catch {
+        /* a partial frame; the next read completes it */
+      }
+    }
+  }
+  if (line) onLine(line);
+  return true;
+}
+
 /** Which capability would answer this? `null` is a valid and common answer. */
 export async function choose(sentence: string): Promise<Choice> {
   const menu = CAPABILITIES.filter((c) => c.readOnly)
