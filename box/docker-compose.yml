@@ -1,0 +1,53 @@
+# What runs on the box.
+#
+# Two containers and nothing else. The node holds the phone; the tunnel holds
+# the connection out. Both restart forever, because nobody is going to SSH in
+# when the power flickers at 2am.
+
+name: cybercheck-node
+
+services:
+  node:
+    image: ${NODE_IMAGE:-ghcr.io/culturereset/cybercheck-node:stable}
+    restart: unless-stopped
+    # ADB owns the USB handle and only one process per machine may hold it, so
+    # nothing else on this box is allowed to run adb.
+    volumes:
+      - /dev/bus/usb:/dev/bus/usb
+      - adb-keys:/root/.android          # answer "Allow USB debugging" once, ever
+      - node-state:/var/lib/cybercheck
+      - /boot/firmware:/boot-config:rw   # where the owner's conf and status live
+    device_cgroup_rules:
+      - 'c 189:* rmw'                    # the whole USB bus: the device node moves
+                                         # when the phone re-enumerates
+    environment:
+      CYBERCHECK_CONF: /boot-config/cybercheck.conf
+      CYBERCHECK_STATUS: /boot-config/cybercheck.status
+      ADB_BINARY: adb
+    healthcheck:
+      test: ["CMD", "node", "/app/scripts/healthcheck.js"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 90s                  # first boot pairs and pulls; be patient
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }   # an SD card is not a log server
+
+  tunnel:
+    image: ${TUNNEL_IMAGE:-ghcr.io/culturereset/cybercheck-tunnel:stable}
+    restart: unless-stopped
+    # Outbound only. Nothing is published, no port is opened on the router, and
+    # this works behind a hotspot or a guest network nobody has the password to.
+    network_mode: service:node
+    depends_on:
+      node: { condition: service_started }
+    volumes:
+      - node-state:/var/lib/cybercheck:ro
+    logging:
+      driver: json-file
+      options: { max-size: "10m", max-file: "3" }
+
+volumes:
+  adb-keys:
+  node-state:

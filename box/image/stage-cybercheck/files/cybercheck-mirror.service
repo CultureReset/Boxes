@@ -1,0 +1,18 @@
+[Unit]
+Description=Show the phone on the screen
+After=cybercheck-session.service
+Requires=cybercheck-session.service
+
+[Service]
+Type=simple
+User=cybercheck
+Environment=DISPLAY=:0
+Environment=XAUTHORITY=/home/cybercheck/.Xauthority
+ExecStart=/usr/local/bin/cybercheck-mirror.sh
+# A phone gets unplugged, the cable gets kicked, the handset reboots. Keep
+# putting it back on the screen without anyone touching the box.
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

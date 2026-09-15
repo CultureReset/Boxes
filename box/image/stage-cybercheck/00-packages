@@ -1,0 +1,15 @@
+android-tools-adb
+ca-certificates
+curl
+imagemagick
+network-manager
+openbox
+scrcpy
+scrot
+usbutils
+x11-utils
+x11-xserver-utils
+xdotool
+xinit
+xserver-xorg
+xserver-xorg-legacy

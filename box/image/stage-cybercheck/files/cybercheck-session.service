@@ -1,0 +1,15 @@
+[Unit]
+Description=CyberCheck desktop session
+After=systemd-user-sessions.service
+
+[Service]
+Type=simple
+User=cybercheck
+PAMName=login
+TTYPath=/dev/tty7
+ExecStart=/usr/bin/xinit /usr/local/bin/cybercheck-session.sh -- :0 vt7 -nolisten tcp
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=graphical.target

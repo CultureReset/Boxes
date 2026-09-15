@@ -1,0 +1,7 @@
+# A handset appearing on the bus does two things: becomes reachable without
+# root, and puts itself on the screen.
+#
+# Matched on the ADB interface class rather than a vendor id, because the owner
+# will replace the phone one day and nobody is editing udev rules in a marina
+# office.
+SUBSYSTEM=="usb", ATTR{bInterfaceClass}=="ff", ATTR{bInterfaceSubClass}=="42", ATTR{bInterfaceProtocol}=="01", MODE="0660", GROUP="plugdev", TAG+="uaccess", RUN+="/usr/bin/systemctl --no-block start cybercheck-mirror.service"

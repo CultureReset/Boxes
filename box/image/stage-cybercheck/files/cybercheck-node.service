@@ -1,0 +1,18 @@
+[Unit]
+Description=CyberCheck node
+Requires=docker.service
+After=docker.service cybercheck-boot.service
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/cybercheck
+ExecStart=/usr/bin/docker compose up -d --pull always
+ExecStop=/usr/bin/docker compose down
+# Never give up. A box at a restaurant gets power-cycled by whoever unplugs the
+# vacuum, and nobody there is going to log in and start it again.
+Restart=on-failure
+RestartSec=30
+
+[Install]
+WantedBy=multi-user.target

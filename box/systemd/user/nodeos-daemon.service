@@ -1,0 +1,14 @@
+[Unit]
+Description=NODE system daemon (talks to Linux so the shell never has to)
+PartOf=graphical-session.target
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=/usr/bin/env nodeos daemon
+Restart=on-failure
+RestartSec=1
+Environment=NODE_ENV=production
+
+[Install]
+WantedBy=graphical-session.target

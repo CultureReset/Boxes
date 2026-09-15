@@ -1,0 +1,29 @@
+# CyberCheck node — the only file you need to edit.
+#
+# Open this on any computer, fill in the three lines below, save, eject, and
+# put the card back in the box. Lines starting with # are ignored.
+#
+# If something goes wrong the box writes cybercheck.status next to this file.
+# Put the card back in a computer and read it.
+
+# --- Wi-Fi ------------------------------------------------------------------
+# The network name exactly as it appears on your phone. Case matters.
+wifi_name=
+
+wifi_password=
+
+# Two-letter country code. Wi-Fi radios are required by law to know where they
+# are, and the box will not connect without it. US, GB, CA, AU...
+country=US
+
+# --- Pairing ----------------------------------------------------------------
+# The code from Settings → Devices → Add a box, in your dashboard.
+# It looks like ABCD-1234-EFGH and is good for one box, once.
+pairing_code=
+
+# --- Optional ---------------------------------------------------------------
+# A name for this box, so a business with several can tell them apart.
+# label=Front desk
+
+# Leave alone unless you have been told otherwise.
+# platform_url=https://api.cybercheck.io

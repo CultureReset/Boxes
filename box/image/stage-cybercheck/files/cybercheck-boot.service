@@ -1,0 +1,14 @@
+[Unit]
+Description=CyberCheck first boot — read the owner's config and join the network
+After=network.target NetworkManager.service
+Wants=NetworkManager.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/sbin/cybercheck-first-boot
+RemainAfterExit=yes
+# Runs every boot on purpose, not once. An owner who moves the box to a new
+# Wi-Fi network edits the same file and power-cycles; nothing else to learn.
+
+[Install]
+WantedBy=multi-user.target

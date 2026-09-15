@@ -1,0 +1,17 @@
+{
+  "name": "node",
+  "version": "0.1.0",
+  "private": true,
+  "description": "NODE — a Linux computer the owner talks to. Everything on screen, nothing in a terminal.",
+  "workspaces": ["daemon", "shell", "apps/menu"],
+  "scripts": {
+    "dev": "npm run dev --workspace=daemon & npm run dev --workspace=shell; wait",
+    "dev:menu": "npm run dev --workspace=apps/menu",
+    "build": "npm run build --workspace=daemon && npm run build --workspace=shell",
+    "typecheck": "npm run typecheck --workspace=daemon && npm run typecheck --workspace=shell",
+    "start": "node daemon/dist/index.js",
+    "test": "npm test --workspace=daemon"
+  },
+  "engines": { "node": ">=20" },
+  "license": "MIT"
+}
