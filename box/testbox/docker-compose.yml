@@ -1,0 +1,61 @@
+# The test box: Ryzen 5 + RX 580, Ubuntu.
+#
+# This is not the appliance. It is the bench where the voice stack gets proven
+# before it is baked into an image. Same pieces, same ports, same env names —
+# so what works here works there.
+#
+# Ports, once, so nothing collides:
+#   11434  ollama        the model
+#    8880  kokoro        the voice
+#    3000  open-webui    a browser chat window, for you, not for the product
+#    7770  node daemon   runs on the host, not here
+#
+# Open WebUI's own port inside its container is 8080. Kokoro's is 8880. They
+# are different services; do not map both to host 3000.
+
+name: nodeos-testbox
+
+services:
+  # gfx803 (Polaris / RX 580) was dropped by ROCm 6. Vulkan is the path that
+  # works: Mesa RADV drives this card well and llama.cpp's Vulkan backend does
+  # not care that AMD stopped shipping compute support for it.
+  #
+  # The stock ollama/ollama image is CUDA + ROCm only — on this card it loads
+  # the model onto the CPU and says nothing about it. Check with
+  # `ollama ps`: a row reading 100% CPU means the GPU is not being used.
+  ollama:
+    image: ${OLLAMA_IMAGE:-ollama/ollama:latest}
+    restart: unless-stopped
+    ports: ["11434:11434"]
+    devices:
+      - /dev/dri:/dev/dri       # render node — Vulkan needs this, not /dev/kfd
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      OLLAMA_HOST: 0.0.0.0
+      OLLAMA_KEEP_ALIVE: 24h    # a 3B model reloading mid-call is a silent call
+
+  # Kokoro-FastAPI speaks the OpenAI speech API, which is why the daemon can
+  # use it without knowing what it is. CPU image by default: the GPU image is
+  # built for CUDA and will not run this card.
+  kokoro:
+    image: ${KOKORO_IMAGE:-ghcr.io/remsky/kokoro-fastapi-cpu:latest}
+    restart: unless-stopped
+    ports: ["8880:8880"]
+
+  # Optional. A chat window for you to poke the model by hand. The product does
+  # not use it and the box does not ship it.
+  open-webui:
+    image: ghcr.io/open-webui/open-webui:main
+    restart: unless-stopped
+    ports: ["3000:8080"]
+    environment:
+      OLLAMA_BASE_URL: http://ollama:11434
+      WEBUI_AUTH: "true"
+    volumes:
+      - open-webui:/app/backend/data
+    depends_on: [ollama]
+
+volumes:
+  ollama:
+  open-webui:

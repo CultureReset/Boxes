@@ -12,11 +12,12 @@ import path from "node:path";
  * business sounds like one thing no matter which door somebody came in.
  *
  * Local first. Piper is a 60MB binary and a voice file; it runs on a mini-PC
- * with no GPU and no network. A cloud voice is faster and better and is a
- * setting, not the design.
+ * with no GPU and no network. Kokoro is better and wants a GPU, so it is a
+ * setting: point NODEOS_TTS_URL at it and it is used, leave it unset and the
+ * box still talks. Either way nothing leaves the machine.
  */
 
-export type Engine = "piper" | "espeak" | "none";
+export type Engine = "kokoro" | "piper" | "espeak" | "none";
 
 export interface Speech {
   /** 16-bit PCM WAV. Callers stream it or hand it to a player. */
@@ -27,35 +28,57 @@ export interface Speech {
 
 const VOICE = process.env.NODEOS_TTS_VOICE ?? "/usr/share/piper-voices/en_US-amy-medium.onnx";
 
+/**
+ * An OpenAI-compatible speech endpoint — Kokoro-FastAPI is the one this was
+ * written against. Unset means local binaries only; the box never reaches for
+ * a service nobody asked for.
+ */
+const TTS_URL = process.env.NODEOS_TTS_URL ?? "";
+const TTS_VOICE = process.env.NODEOS_TTS_REMOTE_VOICE ?? "af_sky";
+const TTS_MODEL = process.env.NODEOS_TTS_MODEL ?? "kokoro";
+const TTS_TIMEOUT_MS = 30_000;
+
 let cached: Engine | null = null;
 
 /** Which voice this machine actually has. Checked once. */
 export async function engine(): Promise<Engine> {
   if (cached) return cached;
-  if (await has("piper")) cached = "piper";
+  if (TTS_URL) cached = "kokoro";
+  else if (await has("piper")) cached = "piper";
   else if (await has("espeak-ng")) cached = "espeak";
   else cached = "none";
   return cached;
 }
 
-export async function speak(text: string): Promise<Speech | null> {
-  const clean = text.replace(/\s+/g, " ").trim().slice(0, 2000);
-  if (!clean) return null;
+/** A local engine, for when the configured remote one is not answering. */
+async function localEngine(): Promise<Engine> {
+  if (await has("piper")) return "piper";
+  if (await has("espeak-ng")) return "espeak";
+  return "none";
+}
 
-  const e = await engine();
-  if (e === "none") return null;
-
-  if (e === "espeak") {
-    const dir = await mkdtemp(path.join(tmpdir(), "nodeos-tts-"));
-    const out = path.join(dir, "out.wav");
-    try {
-      await run("espeak-ng", ["-w", out, "-s", "165", clean], { timeout: 20_000 });
-      return { wav: await readFile(out), engine: "espeak", sampleRate: 22_050 };
-    } finally {
-      await rm(dir, { recursive: true, force: true });
-    }
+async function kokoro(clean: string): Promise<Speech | null> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TTS_TIMEOUT_MS);
+  try {
+    const res = await fetch(`${TTS_URL.replace(/\/$/, "")}/audio/speech`, {
+      method: "POST",
+      signal: ctrl.signal,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ model: TTS_MODEL, voice: TTS_VOICE, input: clean, response_format: "wav" }),
+    });
+    if (!res.ok) return null;
+    const wav = Buffer.from(await res.arrayBuffer());
+    if (wav.length < 64) return null;
+    return { wav, engine: "kokoro", sampleRate: 24_000 };
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
   }
+}
 
+async function piper(clean: string): Promise<Speech | null> {
   // Piper reads the sentence on stdin and writes a WAV on stdout.
   return new Promise((resolve) => {
     const p = spawn("piper", ["--model", VOICE, "--output_file", "-"], { stdio: ["pipe", "pipe", "ignore"] });
@@ -67,6 +90,43 @@ export async function speak(text: string): Promise<Speech | null> {
     p.on("error", () => resolve(null));
     p.stdin.end(clean);
   });
+}
+
+async function espeak(clean: string): Promise<Speech | null> {
+  const dir = await mkdtemp(path.join(tmpdir(), "nodeos-tts-"));
+  const out = path.join(dir, "out.wav");
+  try {
+    await run("espeak-ng", ["-w", out, "-s", "165", clean], { timeout: 20_000 });
+    return { wav: await readFile(out), engine: "espeak", sampleRate: 22_050 };
+  } catch {
+    return null;
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+}
+
+async function render(e: Engine, clean: string): Promise<Speech | null> {
+  if (e === "kokoro") return kokoro(clean);
+  if (e === "piper") return piper(clean);
+  if (e === "espeak") return espeak(clean);
+  return null;
+}
+
+export async function speak(text: string): Promise<Speech | null> {
+  const clean = text.replace(/\s+/g, " ").trim().slice(0, 2000);
+  if (!clean) return null;
+
+  const e = await engine();
+  const first = await render(e, clean);
+  if (first) return first;
+
+  // A container that is down, restarting or out of VRAM must not take the
+  // voice with it. Fall back to whatever is on disk and keep talking.
+  if (e === "kokoro") {
+    const l = await localEngine();
+    if (l !== "none") return render(l, clean);
+  }
+  return null;
 }
 
 /** Say it out loud on this machine's own speakers. */
