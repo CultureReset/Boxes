@@ -36,6 +36,7 @@ import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
+import { ask as kernelAsk } from "./modules/ask.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 const HOST = "127.0.0.1";
@@ -84,7 +85,14 @@ api.post("/api/platform/connect", async ({ body }) => {
 
 /** Ask the box something, deterministically. The voice and SMS paths call this
  *  same function, so a spoken question and a typed one cannot diverge. */
-api.post("/api/ask", ({ body }) => answer(str(obj(body).text, "text", { max: 500 })));
+// The ask bar. When a kernel is attached the sentence becomes a task it
+// decided on; with no kernel the box still answers from the platform it knows.
+api.post("/api/ask", async ({ body }) => {
+  const text = str(obj(body).text, "text", { max: 500 });
+  const resource = str(obj(body).resource, "resource", { optional: true, max: 128 }) || "default";
+  const k = await kernelStatus();
+  return k.available ? kernelAsk(text, resource) : answer(text);
+});
 
 api.get("/api/business/menu", async () => {
   const { slug } = await platformConfig();
