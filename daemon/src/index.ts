@@ -35,6 +35,7 @@ import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
+import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 const HOST = "127.0.0.1";
@@ -132,6 +133,17 @@ api.get("/api/business/availability", async ({ query }) => {
 // line. Hearing and speaking both happen here, on this machine.
 
 api.get("/api/voice", () => voiceStatus());
+
+// ---- Kernel ---------------------------------------------------------------
+// The kernel decides; this screen renders. Every path below comes from the
+// kernel's own handshake, so nothing here has to be edited when it changes.
+api.get("/api/kernel", () => kernelStatus());
+api.get("/api/kernel/collections", async () => ({ collections: await kernelCollections() }));
+api.get("/api/kernel/read/:collection", (c) => kernelRead(c.params.collection));
+api.post("/api/kernel/act/:action", (c) => {
+  const b = obj(c.body);
+  return kernelAct(c.params.action, b.body, b.id === undefined ? undefined : str(b.id, "id"));
+});
 api.get("/api/voice/history", ({ query }) => history(Number(query.get("limit") ?? 50)));
 
 /** A transcript from anywhere — SIP, a carrier webhook, a VM. Text in, text out. */
