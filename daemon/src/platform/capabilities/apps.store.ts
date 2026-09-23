@@ -151,12 +151,12 @@ export default [
 
       // Job states become sentences. Nobody reads "exit code 0".
       const said =
-        job.state === "done"    ? "Done. It's on your home screen."
-      : job.state === "failed"  ? "That didn't work. Nothing was changed."
-      : job.state === "running" ? "Still going."
-      :                           "Queued.";
+        job.status === "done"    ? "Done. It's on your home screen."
+      : job.status === "failed"  ? "That didn't work. Nothing was changed."
+      : job.status === "running" ? "Still going."
+      :                            "Queued.";
 
-      return { ok: true, state: job.state, message: said };
+      return { ok: true, state: job.status, message: said };
     },
   },
 

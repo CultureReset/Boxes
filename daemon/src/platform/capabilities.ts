@@ -27,6 +27,13 @@ export interface Capability {
   slots?: Record<string, "text" | "time" | "date" | "number">;
   /** Read-only capabilities are safe to offer a model. Writes are not. */
   readOnly: boolean;
+  /**
+   * False withholds this from a model entirely, even when it is offered a
+   * choice. Anything that spends money, installs software, or reaches a human
+   * should set this false and be invoked by a person rather than proposed by a
+   * reasoner. Omitted means true.
+   */
+  agentSafe?: boolean;
   run: (slots: Record<string, string>) => Promise<unknown>;
 }
 
