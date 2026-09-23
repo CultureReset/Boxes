@@ -17,8 +17,16 @@ import { CAPABILITIES } from "../platform/capabilities.js";
  * ships pointed at localhost. No key, no network, no per-question cost.
  */
 
-const BASE = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:11434/v1";
-const MODEL = process.env.NODEOS_LLM_MODEL ?? "qwen2.5:3b";
+// Port 8080 is llama-swap, which fronts llama.cpp and loads whichever model
+// is asked for. It used to default to 11434, which is Ollama's — so a box with
+// its own models built and running still reached for something that wasn't
+// installed, and the escalation path silently did nothing.
+//
+// "fast" is the small Qwen3 4B. This path only runs when the deterministic
+// router has already failed to match, so it wants to be quick, not clever.
+// Set NODEOS_LLM_MODEL to coder, reason or big to change that.
+const BASE = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:8080/v1";
+const MODEL = process.env.NODEOS_LLM_MODEL ?? "fast";
 const TIMEOUT_MS = 20_000;
 
 export interface Choice {

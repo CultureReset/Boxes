@@ -33,11 +33,30 @@ import type { Automation, CalendarEvent } from "./types.js";
 import { platformConfig, savePlatformConfig, isConnected } from "./platform/config.js";
 import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
-import { CAPABILITIES } from "./platform/capabilities.js";
+import { CAPABILITIES, BY_KEY } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
-const HOST = "127.0.0.1";
+
+/**
+ * Which address to listen on.
+ *
+ * Default stays 127.0.0.1 — a box sitting in a restaurant back office should
+ * not answer the local network just because someone joined the wifi. That was
+ * the right call and it stays the default.
+ *
+ * But it was hardcoded, which also made the box unreachable over Tailscale,
+ * where the owner legitimately wants to open it from their phone.
+ *
+ * So: set NODEOS_HOST to the box's Tailscale address (the 100.x.x.x one,
+ * `tailscale ip -4`) and it becomes reachable on that private network and
+ * nowhere else. Devices on your tailnet can see it; the wifi, the router and
+ * the internet cannot.
+ *
+ * Setting this to 0.0.0.0 WOULD expose it to the local network. Don't, unless
+ * you mean it.
+ */
+const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = process.env.NODEOS_SHELL_DIST ?? path.resolve(here, "../../shell/dist");
 
@@ -84,6 +103,34 @@ api.post("/api/platform/connect", async ({ body }) => {
 /** Ask the box something, deterministically. The voice and SMS paths call this
  *  same function, so a spoken question and a typed one cannot diverge. */
 api.post("/api/ask", ({ body }) => answer(str(obj(body).text, "text", { max: 500 })));
+
+/**
+ * Run one capability by name.
+ *
+ * `/api/ask` is for a sentence someone said — it goes through the router and
+ * the router decides. This is for a screen that already knows which thing it
+ * wants: a tile tapped in the app store, a button on the calendar. No routing,
+ * no guessing, no model.
+ *
+ * The key must exist in the registry. An unknown key is a 404, not an attempt
+ * to be helpful — the static allowlist is the whole point.
+ */
+api.post("/api/capability", async ({ body }) => {
+  const b = obj(body);
+  const key = str(b.key, "key", { max: 100 });
+
+  const cap = BY_KEY.get(key);
+  if (!cap) throw new HttpError(404, `No capability called "${key}"`);
+
+  // Slots arrive as strings; that's what run() expects.
+  const raw = obj(b.args ?? {});
+  const args: Record<string, string> = {};
+  for (const [k, v] of Object.entries(raw)) {
+    if (v !== null && v !== undefined) args[k] = String(v).slice(0, 2000);
+  }
+
+  return cap.run(args);
+});
 
 api.get("/api/business/menu", async () => {
   const { slug } = await platformConfig();
@@ -324,11 +371,29 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
   }
 }
 
+/**
+ * Origins allowed to call the API.
+ *
+ * Localhost always, because that's the box talking to its own shell.
+ *
+ * Plus whatever NODEOS_HOST is bound to — otherwise serving the shell over
+ * Tailscale hands the browser a page whose every API call comes back 403, and
+ * you get a black screen with no clue why. The page loads, the app starts, the
+ * first fetch is refused, nothing renders.
+ *
+ * This does not open anything new. The daemon only listens on the address it
+ * was told to bind to, so trusting that same address as an origin lets the
+ * shell talk to the daemon it was served by, and nothing else.
+ */
+const ALLOWED_ORIGIN = new RegExp(
+  `^https?://(127\\.0\\.0\\.1|localhost|${HOST.replace(/\./g, "\\.")})(:\\d+)?$`,
+);
+
 const server = http.createServer(async (req, res) => {
-  // Only ever talk to the local shell. A browser tab on another origin cannot
-  // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
+  // A browser tab on any other origin cannot read responses (no CORS headers)
+  // and cannot POST (JSON body forces a preflight we never answer).
   const origin = req.headers.origin;
-  if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+  if (origin && !ALLOWED_ORIGIN.test(origin)) {
     sendJson(res, 403, { error: "Forbidden origin" });
     return;
   }

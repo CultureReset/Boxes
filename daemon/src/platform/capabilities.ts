@@ -1,5 +1,6 @@
 import { platform, qs } from "./client.js";
 import { platformConfig } from "./config.js";
+import { fromFolder } from "./registry.js";
 
 /**
  * What the box knows how to do.
@@ -32,7 +33,12 @@ export interface Capability {
 const today = () => new Date().toISOString().slice(0, 10);
 const plusDays = (n: number) => new Date(Date.now() + n * 864e5).toISOString().slice(0, 10);
 
-export const CAPABILITIES: Capability[] = [
+/**
+ * The built-in set. These are compiled in because they are the box's own
+ * core. Anything else belongs in platform/capabilities/ as its own file —
+ * see registry.ts. Nothing new should be added to this array.
+ */
+const BUILTIN: Capability[] = [
   {
     key: "business.identity",
     summary: "Who this box belongs to.",
@@ -113,6 +119,21 @@ export const CAPABILITIES: Capability[] = [
       return platform.get(`/api/dashboard/events${qs({ slug: c.slug, from: today(), to: plusDays(30) })}`);
     },
   },
+];
+
+/**
+ * Built-ins, plus every capability found in platform/capabilities/.
+ *
+ * Everything downstream — the router, BY_KEY, the answer layer — is unchanged.
+ * It still receives one list of Capability. The list is just assembled by
+ * reading a folder now instead of being entirely compiled in.
+ *
+ * A capability file that is broken, or claims a key already in use, is skipped
+ * with a warning at startup. It cannot stop the box from starting.
+ */
+export const CAPABILITIES: Capability[] = [
+  ...BUILTIN,
+  ...(await fromFolder(BUILTIN.map((c) => c.key))),
 ];
 
 export const BY_KEY = new Map(CAPABILITIES.map((c) => [c.key, c]));
