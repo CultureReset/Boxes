@@ -39,7 +39,8 @@ async function parseDesktop(file: string): Promise<Record<string, string> | null
   }
   const entry: Record<string, string> = {};
   let inMain = false;
-  for (const raw of text.split("\n")) {
+  for (const raw of text.split("
+")) {
     const line = raw.trim();
     if (line.startsWith("[")) {
       inMain = line === "[Desktop Entry]";
@@ -77,7 +78,11 @@ async function scan(): Promise<AppEntry[]> {
         byId.delete(id);
         continue;
       }
-      if (e.OnlyShowIn) {\n        const desktops = (process.env.XDG_CURRENT_DESKTOP ?? "").split(":").filter(Boolean);\n        const allowed = e.OnlyShowIn.split(";").filter(Boolean);\n        if (desktops.length > 0 && !allowed.some((d) => desktops.some((cur) => cur.toLowerCase() === d.toLowerCase()))) continue;\n      }
+      if (e.OnlyShowIn) {
+        const desktops = (process.env.XDG_CURRENT_DESKTOP ?? "").split(":").filter(Boolean);
+        const allowed = e.OnlyShowIn.split(";").filter(Boolean);
+        if (desktops.length > 0 && !allowed.some((d) => desktops.some((cur) => cur.toLowerCase() === d.toLowerCase()))) continue;
+      }
       const cats = (e.Categories ?? "").split(";").filter(Boolean);
       const hidden = e.Terminal?.match(/true/i) || HIDE_IDS.test(id) || (cats.length > 0 && cats.every((c) => HIDE_CATEGORIES.has(c)));
       if (hidden) {
@@ -133,7 +138,21 @@ export const linuxProvider: AppProvider = {
       invalidate();
       return { ok: r.ok, message: r.ok ? `Removed ${app.name}` : r.stderr.trim() };
     }
-    const { packageJob } = await import("../packages.js");\n    if (app.source === "flatpak") {\n      const id = localId;\n      const job = await packageJob("remove", id, "flathub");\n      return { ok: true, message: `Removing ${app.name}`, jobId: job.id };\n    }\n    let pkg = localId;\n    if (await has("dpkg-query")) {\n      const owner = await run("dpkg-query", ["-S", app.desktopFile ?? ""]);\n      const match = owner.stdout.match(/^([^:]+):/);\n      if (match) pkg = match[1];\n    } else {\n      pkg = app.exec.split(/\s+/)[0]?.split("/").pop() ?? localId;\n    }\n    const job = await packageJob("remove", pkg);
+    const { packageJob } = await import("../packages.js");
+    if (app.source === "flatpak") {
+      const id = localId;
+      const job = await packageJob("remove", id, "flathub");
+      return { ok: true, message: `Removing ${app.name}`, jobId: job.id };
+    }
+    let pkg = localId;
+    if (await has("dpkg-query")) {
+      const owner = await run("dpkg-query", ["-S", app.desktopFile ?? ""]);
+      const match = owner.stdout.match(/^([^:]+):/);
+      if (match) pkg = match[1];
+    } else {
+      pkg = app.exec.split(/\s+/)[0]?.split("/").pop() ?? localId;
+    }
+    const job = await packageJob("remove", pkg);
     return { ok: true, message: `Removing ${app.name}`, jobId: job.id };
   },
   async matchWindow(cls) {
