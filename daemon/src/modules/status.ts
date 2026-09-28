@@ -58,7 +58,7 @@ export async function backgroundPath(): Promise<string | null> {
 }
 
 export async function capabilities(): Promise<Record<string, boolean>> {
-  const names = ["hyprctl", "nmcli", "bluetoothctl", "wpctl", "brightnessctl", "pacman", "checkupdates", "omarchy-theme-set", "uwsm-app", "gtk-launch", "xdg-open", "systemctl", "notify-send", "claude", "codex", "opencode"];
+  const names = ["hyprctl", "wmctrl", "xdotool", "nmcli", "bluetoothctl", "wpctl", "brightnessctl", "apt", "apt-get", "dpkg-query", "pacman", "checkupdates", "omarchy-theme-set", "uwsm-app", "gtk-launch", "xdg-open", "systemctl", "notify-send", "claude", "codex", "opencode"];
   const out: Record<string, boolean> = {};
   await Promise.all(names.map(async (n) => (out[n] = await has(n))));
   return out;
@@ -68,7 +68,7 @@ let demoCache: boolean | null = null;
 /** Demo mode means no compositor and no session tools: use canned data. */
 export async function isDemo(): Promise<boolean> {
   if (demoCache !== null) return demoCache;
-  demoCache = process.env.NODEOS_DEMO === "1" || !(await has("hyprctl"));
+  demoCache = process.env.NODEOS_DEMO === "1" || process.env.NODEOS_DEMO !== "0" && !(await has("hyprctl")) && !(await has("wmctrl")) && !(await has("xdotool")) && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
   return demoCache;
 }
 
