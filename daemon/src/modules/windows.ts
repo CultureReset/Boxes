@@ -28,8 +28,8 @@ export async function listWindows(): Promise<WindowEntry[]> {
     const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";
     const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";
     const out: WindowEntry[] = [];
-    for (const line of r.stdout.split("\\n").filter(Boolean)) {
-      const m = line.match(/^(0x[0-9a-f]+)\\s+(\\d+)\\s+(\\d+)\\s+\\S+\\s+\\S+\\s+\\S+\\s+\\S+\\s+(\\S+)\\s+\\S+\\s+(.*)$/i);
+    for (const line of r.stdout.split("\n").filter(Boolean)) {
+      const m = line.match(/^(0x[0-9a-f]+)\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)\s+\S+\s+(.*)$/i);
       if (!m) continue;
       const [, address, workspace, pid, cls, title] = m;
       out.push({ address, class: cls, title, workspace: Number(workspace), pid: Number(pid), focused: address.toLowerCase() === activeHex, appId: await appIdForWindow(cls.split(".").pop() ?? cls, title) });
@@ -103,7 +103,7 @@ export async function watchHyprland(): Promise<void> {
     client.on("data", (chunk) => {
       buf += chunk.toString("utf8");
       let idx: number;
-      while ((idx = buf.indexOf("\\n")) >= 0) {
+      while ((idx = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, idx);
         buf = buf.slice(idx + 1);
         const ev = line.split(">>")[0];
