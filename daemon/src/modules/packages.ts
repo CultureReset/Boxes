@@ -14,7 +14,7 @@ export interface Package {
   repo: string;
   installed: boolean;
   /** Which real source this came from, and the id to install by. */
-  source: "flathub" | "pacman";
+  source: "flathub" | "pacman" | "apt";
   appId?: string;
   icon?: string;
 }
@@ -39,6 +39,9 @@ export async function updatesCount(): Promise<number | null> {
   if (await has("checkupdates")) {
     const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
     count = r.stdout.trim() ? r.stdout.trim().split("\n").length : 0;
+  } else if (await has("apt")) {
+    const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+    count = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).length;
   } else if (await isDemo()) count = 3;
   updatesCache = { at: Date.now(), count };
   return count;
@@ -46,11 +49,13 @@ export async function updatesCount(): Promise<number | null> {
 
 /** Zero updates and "cannot check" are different things; the UI says which. */
 export async function updatesStatus(): Promise<FeatureStatus> {
-  return check("checkupdates");
+  if (await has("checkupdates")) return check("checkupdates");
+  if (await has("apt")) return { available: true, demo: false, tool: "apt" };
+  return { available: false, demo: false, tool: "packages", install: "apt or pacman", reason: "No supported native package manager was found." };
 }
 
 export async function listUpdates(): Promise<PackageResult> {
-  const f = await check("checkupdates");
+  const f = await updatesStatus();
   if (!f.available) return { status: f, packages: [] };
   if (f.demo) {
     return { status: f, packages: [
@@ -59,11 +64,19 @@ export async function listUpdates(): Promise<PackageResult> {
       { name: "omarchy", version: "3.4.1 → 3.5.0", description: "Omarchy", repo: "omarchy", installed: true, source: "pacman" },
     ] };
   }
-  const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
-  return { status: f, packages: r.stdout.trim().split("\n").filter(Boolean).map((line) => {
-    const [name, from, , to] = line.split(/\s+/);
-    return { name, version: `${from} → ${to}`, description: "", repo: "", installed: true, source: "pacman" as const };
-  }) };
+  if (await has("checkupdates")) {
+    const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
+    return { status: f, packages: r.stdout.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, from, , to] = line.split(/\s+/);
+      return { name, version: `${from} → ${to}`, description: "", repo: "", installed: true, source: "pacman" as const };
+    }) };
+  }
+  const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+  const packages = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).map((line) => {
+    const m = line.match(/^([^/]+)\/\S+\s+(\S+).*\[upgradable from: ([^\]]+)\]/i);
+    return { name: m?.[1] ?? line.split("/")[0], version: m ? `${m[3]} → ${m[2]}` : "", description: "", repo: "apt", installed: true, source: "apt" as const };
+  });
+  return { status: f, packages };
 }
 
 /**
@@ -84,6 +97,17 @@ export async function searchPackages(q: string): Promise<PackageResult> {
     icon: a.icon,
   }));
   const f = await check("pacman");
+  if (!f.available && await has("apt")) {
+    if (!needle) return { status: { available: true, demo: false, tool: "apt" }, packages: fromFlathub };
+    const installedRaw = await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"], { timeout: 15000 });
+    const installed = new Set(installedRaw.stdout.split("\n").map((n) => n.replace(/:.*$/, "")));
+    const r = await run("apt-cache", ["search", "--names-only", needle], { timeout: 15000, env: { LC_ALL: "C" } });
+    const out: Package[] = r.stdout.split("\n").filter(Boolean).slice(0, 40).map((line) => {
+      const [name, ...rest] = line.split(" - ");
+      return { name, version: "", description: rest.join(" - "), repo: "apt", installed: installed.has(name), source: "apt" as const };
+    });
+    return { status: { available: true, demo: false, tool: "apt" }, packages: [...out, ...fromFlathub] };
+  }
   if (!f.available) {
     // No pacman is fine as long as Flathub answered; only both failing is a dead end.
     if (fromFlathub.length > 0) return { status: { available: true, demo: false }, packages: fromFlathub };
@@ -136,8 +160,9 @@ async function featured(): Promise<Package[]> {
 }
 
 export async function installedPackages(): Promise<string[]> {
-  if (!(await has("pacman"))) return [];
-  return (await run("pacman", ["-Qeq"])).stdout.trim().split("\n");
+  if (await has("pacman")) return (await run("pacman", ["-Qeq"])).stdout.trim().split("\n");
+  if (await has("dpkg-query")) return (await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"])).stdout.trim().split("\n");
+  return [];
 }
 
 /**
@@ -149,14 +174,15 @@ export async function installedPackages(): Promise<string[]> {
  * app id goes to flatpak (user scope, no root); anything else goes to pacman
  * through pkexec so polkit shows the system password dialog.
  */
-export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman"): Promise<Job> {
+export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman" | "apt"): Promise<Job> {
   if (source === "flathub" || (name && source !== "pacman" && name.includes(".") && flathub.validId(name) && action !== "update")) {
     const f = await flathub.status();
     if (!f.available) throw new HttpError(503, f.reason!);
     return flathub.install(name!, action === "remove");
   }
   if (name && !NAME_RE.test(name)) throw new HttpError(400, "Invalid package name");
-  const f = await check("pacman");
+  const native = source === "apt" || (!(await has("pacman")) && await has("apt")) ? "apt" : "pacman";
+  const f = native === "apt" ? { available: true, demo: false, tool: "apt" } : await check("pacman");
   if (!f.available) throw new HttpError(503, f.reason!);
   const title = action === "update" ? "Updating everything" : `${action === "install" ? "Installing" : "Removing"} ${name}`;
   const job = createJob(action, title, { name });
@@ -171,7 +197,10 @@ export async function packageJob(action: "install" | "remove" | "update", name?:
     }
     let cmd: string;
     let args: string[];
-    if (action === "update" && (await has("omarchy-update"))) {
+    if (native === "apt") {
+      cmd = "pkexec";
+      args = action === "remove" ? ["apt-get", "remove", "-y", name!] : action === "update" ? ["apt-get", "upgrade", "-y"] : ["apt-get", "install", "-y", name!];
+    } else if (action === "update" && (await has("omarchy-update"))) {
       cmd = "omarchy-update";
       args = [];
     } else if (action === "install" && (await has("omarchy-pkg-install"))) {
