@@ -335,11 +335,7 @@ const server = http.createServer(async (req, res) => {
       const host = (req.headers.host ?? "").split(":")[0];
       allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);
     } catch {}
-    if (!allowed) {
-    sendJson(res, 403, { error: "Forbidden origin" });
-    return;
-  }
-  if (req.url?.startsWith("/api/")) {
+    if (!allowed) {\n      sendJson(res, 403, { error: "Forbidden origin" });\n      return;\n    }\n  }\n  if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });
     return;
   }
