@@ -37,7 +37,7 @@ import { CAPABILITIES } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
-const HOST = "127.0.0.1";
+const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = process.env.NODEOS_SHELL_DIST ?? path.resolve(here, "../../shell/dist");
 
@@ -236,11 +236,11 @@ api.get("/api/store/updates", () => listUpdates());
 api.get("/api/store/status", () => updatesStatus());
 api.post("/api/store/install", ({ body }) => {
   const b = obj(body);
-  return packageJob("install", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : undefined);
+  return packageJob("install", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : b.source === "apt" ? "apt" : undefined);
 });
 api.post("/api/store/remove", ({ body }) => {
   const b = obj(body);
-  return packageJob("remove", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : undefined);
+  return packageJob("remove", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : b.source === "apt" ? "apt" : undefined);
 });
 api.get("/api/store/icon/:id", async ({ params, res }) => {
   const img = await flathubIcon(params.id);
@@ -328,7 +328,7 @@ const server = http.createServer(async (req, res) => {
   // Only ever talk to the local shell. A browser tab on another origin cannot
   // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
   const origin = req.headers.origin;
-  if (origin && !/^https?:\/\/(127\.0\.0\.1|localhost)(:\d+)?$/.test(origin)) {
+  if (origin) {\n    let allowed = false;\n    try {\n      const o = new URL(origin);\n      const host = (req.headers.host ?? "").split(":")[0];\n      allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);\n    } catch {}\n    if (!allowed) {
     sendJson(res, 403, { error: "Forbidden origin" });
     return;
   }
