@@ -167,7 +167,7 @@ export function Apps({ onJob, params }: ScreenProps) {
 function StoreCard({ p, onInstall }: { p: Package; onInstall: (p: Package) => void }) {
   // Real artwork from the catalogue when it has some, a coloured initial otherwise.
   const icon = p.source === "flathub" && p.appId ? <span className="app-icon real" style={{ ["--ic" as string]: colorFor(p.name) }}><img src={`/api/store/icon/${encodeURIComponent(p.appId)}`} alt="" loading="lazy" onError={(e) => ((e.currentTarget.parentElement as HTMLElement).textContent = p.name.charAt(0).toUpperCase())} /></span> : <AppIcon name={p.name} color={colorFor(p.name)} />;
-  const from = p.source === "flathub" ? `Flathub · ${p.version}` : `${p.repo || "Arch"} · ${p.version}`;
+  const from = p.source === "flathub" ? `Flathub · ${p.version}` : `${p.repo || (p.source === "apt" ? "Ubuntu" : "Arch")} · ${p.version}`;
   return (
     <ItemCard icon={icon} title={p.name} subtitle={p.description || p.repo} meta={<><Dot state={p.installed ? "on" : "off"} /> {p.installed ? "Installed" : from}</>} action={p.installed ? <span className="pill green"><Check size={12} /> Installed</span> : <button type="button" className="btn sm pillbtn primary" onClick={() => onInstall(p)}><Download size={13} /> Get</button>} />
   );
