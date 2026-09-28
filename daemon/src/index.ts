@@ -328,7 +328,14 @@ const server = http.createServer(async (req, res) => {
   // Only ever talk to the local shell. A browser tab on another origin cannot
   // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
   const origin = req.headers.origin;
-  if (origin) {\n    let allowed = false;\n    try {\n      const o = new URL(origin);\n      const host = (req.headers.host ?? "").split(":")[0];\n      allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);\n    } catch {}\n    if (!allowed) {
+  if (origin) {
+    let allowed = false;
+    try {
+      const o = new URL(origin);
+      const host = (req.headers.host ?? "").split(":")[0];
+      allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);
+    } catch {}
+    if (!allowed) {
     sendJson(res, 403, { error: "Forbidden origin" });
     return;
   }
