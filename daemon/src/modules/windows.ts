@@ -22,8 +22,7 @@ interface HyprClient {
 }
 
 export async function listWindows(): Promise<WindowEntry[]> {
-  if (await isDemo()) return demoWindows;
-  const r = await run("hyprctl", ["clients", "-j"]);
+  if (await isDemo()) return demoWindows;\n  if (!(await has("hyprctl")) && await has("wmctrl")) {\n    const r = await run("wmctrl", ["-lpGx"]);\n    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";\n    const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";\n    const out: WindowEntry[] = [];\n    for (const line of r.stdout.split("\\n").filter(Boolean)) {\n      const m = line.match(/^(0x[0-9a-f]+)\\s+(\\d+)\\s+(\\d+)\\s+\\S+\\s+\\S+\\s+\\S+\\s+\\S+\\s+(\\S+)\\s+\\S+\\s+(.*)$/i);\n      if (!m) continue;\n      const [, address, workspace, pid, cls, title] = m;\n      out.push({ address, class: cls, title, workspace: Number(workspace), pid: Number(pid), focused: address.toLowerCase() === activeHex, appId: await appIdForWindow(cls.split(".").pop() ?? cls, title) });\n    }\n    return out;\n  }\n  const r = await run("hyprctl", ["clients", "-j"]);
   let clients: HyprClient[] = [];
   try {
     clients = JSON.parse(r.stdout);
@@ -49,20 +48,20 @@ export async function listWindows(): Promise<WindowEntry[]> {
 
 export async function focusWindow(address: string): Promise<boolean> {
   if (await isDemo()) return true;
-  const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
+  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address])).ok;\n  const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
   return r.ok;
 }
 
 export async function closeWindow(address: string): Promise<boolean> {
   if (await isDemo()) return true;
-  const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
+  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address])).ok;\n  const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
   return r.ok;
 }
 
 /** Bring the NODE shell back on screen: focus its window, or the home workspace. */
 export async function goHome(): Promise<boolean> {
   if (await isDemo()) return true;
-  const r = await run("hyprctl", ["dispatch", "focuswindow", `class:${SHELL_CLASS}`]);
+  if (!(await has("hyprctl")) && await has("wmctrl")) {\n    const r = await run("wmctrl", ["-xa", SHELL_CLASS]);\n    return r.ok;\n  }\n  const r = await run("hyprctl", ["dispatch", "focuswindow", `class:${SHELL_CLASS}`]);
   if (!r.ok || /No such window/i.test(r.stdout + r.stderr)) await run("hyprctl", ["dispatch", "workspace", HOME_WORKSPACE]);
   return true;
 }
