@@ -270,7 +270,8 @@ inherited `Linux-` desktop layer and is not part of the business path above.
 
 - Apps from three providers: `.desktop` files, web apps run in their own browser
   window, and apps on a phone plugged in over USB (adb, mirrored with scrcpy).
-- An app store over Flathub (flatpak) and pacman, with an apt-based update check.
+- An app store over Flathub (flatpak), pacman and apt (`pkexec apt-get` install/remove/upgrade, `apt-cache` search, `dpkg-query` for what is installed). Package names must start with a letter, digit or `@`.
+- On an X11 desktop with no Hyprland (a plain Ubuntu box), windows are listed, focused and closed through `wmctrl`/`xdotool` instead of `hyprctl` (`daemon/src/modules/windows.ts`).
 - Files (home folder and mounted media only), a calendar (local events plus the
   platform's bookings, events and specials), notifications, Hyprland windows.
 - Settings: Wi-Fi, Bluetooth, sound, brightness, night light, power, themes and
