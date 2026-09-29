@@ -22,6 +22,26 @@ apps, files and meetings are sample data. The banner says so on screen.*
 
 ![Where this repo sits in the whole system](docs/images/where-it-fits.png)
 
+<!-- branches:start -->
+## Branches
+
+*Read from GitHub on 2026-09-29. 6 branches.*
+
+- **Default branch on GitHub:** `claude/linux-build-cleanup-dfpu0e`.
+- **`claude/repo-code-analysis-y4n1k7`** is where this README and the audit fixes live. It contains every commit on `claude/linux-build-cleanup-dfpu0e` and more (this README, the audit fixes and the screenshots).
+- **1 other branch holds commits that `claude/repo-code-analysis-y4n1k7` does not have.** The newest is `fix/ubuntu-node-support` (last commit 2026-09-28, 19 commits not in the work branch). Check it before assuming the work branch is the whole story.
+
+| Branch | Last commit | Not in the work branch | Last commit message |
+| --- | --- | --- | --- |
+| `claude/repo-code-analysis-y4n1k7` (work branch) | 2026-09-29 | - | this README and the audit fixes |
+| `fix/ubuntu-node-support` | 2026-09-28 | 19 | Show Ubuntu source in app store |
+| `working-box` | 2026-09-22 | 0 | Capability loader, phone and notify capabilities, apt support, Tailscale |
+| `claude/repo-docs-review-pt7b58` | 2026-09-21 | 0 | feat(daemon): the ask bar goes through the kernel |
+| `claude/linux-build-cleanup-dfpu0e` (default) | 2026-09-15 | 0 | spec: the orchestration architecture |
+| `main` | 2026-09-15 | 0 | spec: the orchestration architecture |
+
+<!-- branches:end -->
+
 ## Anything that changes something goes through the kernel
 
 The ask bar does not act on its own. `daemon/src/platform/decide.ts` is the one
