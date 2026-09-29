@@ -26,7 +26,7 @@ export interface PackageResult {
   packages: Package[];
 }
 
-const NAME_RE = /^[a-z0-9@._+-]+$/i;
+const NAME_RE = /^[a-z0-9@][a-z0-9@._+-]*$/i;
 
 let updatesCache: { at: number; count: number | null } | null = null;
 
