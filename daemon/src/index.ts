@@ -35,6 +35,8 @@ import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
 import { CAPABILITIES, BY_KEY } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
+import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
+import { ask as kernelAsk } from "./modules/ask.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 
@@ -102,7 +104,14 @@ api.post("/api/platform/connect", async ({ body }) => {
 
 /** Ask the box something, deterministically. The voice and SMS paths call this
  *  same function, so a spoken question and a typed one cannot diverge. */
-api.post("/api/ask", ({ body }) => answer(str(obj(body).text, "text", { max: 500 })));
+// The ask bar. When a kernel is attached the sentence becomes a task it
+// decided on; with no kernel the box still answers from the platform it knows.
+api.post("/api/ask", async ({ body }) => {
+  const text = str(obj(body).text, "text", { max: 500 });
+  const resource = str(obj(body).resource, "resource", { optional: true, max: 128 }) || "default";
+  const k = await kernelStatus();
+  return k.available ? kernelAsk(text, resource) : answer(text);
+});
 
 /**
  * Run one capability by name.
@@ -179,6 +188,17 @@ api.get("/api/business/availability", async ({ query }) => {
 // line. Hearing and speaking both happen here, on this machine.
 
 api.get("/api/voice", () => voiceStatus());
+
+// ---- Kernel ---------------------------------------------------------------
+// The kernel decides; this screen renders. Every path below comes from the
+// kernel's own handshake, so nothing here has to be edited when it changes.
+api.get("/api/kernel", () => kernelStatus());
+api.get("/api/kernel/collections", async () => ({ collections: await kernelCollections() }));
+api.get("/api/kernel/read/:collection", (c) => kernelRead(c.params.collection));
+api.post("/api/kernel/act/:action", (c) => {
+  const b = obj(c.body);
+  return kernelAct(c.params.action, b.body, b.id === undefined ? undefined : str(b.id, "id"));
+});
 api.get("/api/voice/history", ({ query }) => history(Number(query.get("limit") ?? 50)));
 
 /** A transcript from anywhere — SIP, a carrier webhook, a VM. Text in, text out. */
