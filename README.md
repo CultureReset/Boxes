@@ -1,12 +1,50 @@
-# NODE
+# NODE (Boxes)
 
 A Linux computer the owner talks to. Everything on screen, nothing in a terminal.
+
+This is **the TV screen of a Ghost box**: home screens, apps, agents, files, a
+calendar, and an ask bar you can type or speak into. On a Ghost box it is
+installed by `nextgent-ghost-image` as the `boxes` block and runs as `ghost-tv`
+on `http://127.0.0.1:7770`. It replaces the older `Linux-` repo.
+
+![Home, in demo mode](docs/images/tv-home.png)
+
+*Home. This capture is in demo mode (no desktop session was running), so the
+apps, files and meetings are sample data. The banner says so on screen.*
+
+| Apps | Agents |
+| --- | --- |
+| ![Apps](docs/images/tv-apps.png) | ![Agents](docs/images/tv-agents.png) |
+
+| Files | Calendar |
+| --- | --- |
+| ![Files](docs/images/tv-files.png) | ![Calendar](docs/images/tv-calendar.png) |
+
+![Where this repo sits in the whole system](docs/images/where-it-fits.png)
+
+## Anything that changes something goes through the kernel
+
+The ask bar does not act on its own. `daemon/src/platform/decide.ts` is the one
+door: a sentence goes to core (`NEXTGENT_CORE_URL`, default
+`http://127.0.0.1:8764`) and is decided by the owner's rules there, ALLOW, ASK
+(the owner is texted a code) or DENY. When core is not reachable the box still
+answers questions that only read (hours, menu, bookings, reviews, events, which apps are installed), and
+**refuses anything that would use the phone or send a text**
+(`daemon/src/platform/gate.ts`). Every `adb` call is pinned to the box's one
+phone, `NEXTGENT_ANDROID_SERIAL`.
+
+## Run it
 
 ```bash
 npm install
 npm run dev          # daemon on :7770, shell on :5173
 npm run dev:menu     # the menu app on :3000
+npm run build        # daemon + shell, what the installer runs
+npm test             # daemon tests (7)
 ```
+
+With no desktop session the daemon starts in demo mode with sample data. On a
+Ghost box, `ghost install boxes` builds it and starts `ghost-tv`.
 
 ## What is here
 
@@ -195,8 +233,11 @@ change, and the phrase is now live on every box that syncs.
   problem; it goes through `platform/`.
 - Nothing has been tested against a real handset yet. The voice pipeline has
   been exercised end to end with text and with a stub platform.
-- `box/image/` is still the Raspberry Pi build. The target is x86, 16GB, with an
-  immutable image and rollback.
+- `box/image/` is still the Raspberry Pi build (docker, a udev rule, a screen
+  mirror script). **Do not run it on a Ghost box**: there `androidd` owns the
+  phone and `nextgent-ghost-image` owns the services, and the Pi image would
+  start a second adb owner. The target is x86, 16GB, with rollback, which the
+  installer provides.
 - Nothing writes outward yet. Canonical facts, fan-out and receipts — the
   "say it once, it lands everywhere" half — are not in this repo. The design is
   finished and sitting in `cybercheck-orchestrator/db/*.sql` and
