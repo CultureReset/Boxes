@@ -25,18 +25,30 @@ service-side, exactly as `The_System` §25 puts it:
 
 These files hold a Supabase key and write to the database directly:
 
-    config/supabase.js          ← the key
-    services/phone.service.js         11 call sites
-    services/realtime-voice.service.js 6 call sites
-    services/ai-orchestrator.service.js 3 call sites
-    services/openai.service.js         4 call sites
+    config/supabase.js, config/database.js   ← the key
+    services/runtime-executor.service.js     18 query sites
+    services/phone.service.js                12 call sites
+    services/sms.service.js                   8
+    services/voiceDataExtraction.js           8
+    services/realtime-voice.service.js        5
+    services/ocr.service.js                   4
+    services/ai-orchestrator.service.js       3
+    services/openai.service.js                3
+    services/sms-ai.service.js                3
+    workers/receiptWorker.js                  2
+
+(66 `.from('…')` sites in total, counted with grep; there is no `package.json`
+in this folder.)
 
 That breaks the rule `gcr-api-clean/CLAUDE.md` states plainly: **only
 gcr-api-clean talks to the database.** Two writers against one schema drift
 until one has a hole.
 
-It works today, so it has not been torn out. The fix is 24 call sites,
-mechanical, and each one becomes an HTTP call to `gcr-api-clean`:
+It works today, so it has not been torn out. The fix is those 66 call sites,
+mechanical, and each one becomes an HTTP call to `gcr-api-clean`. The table
+below covers four tables; the code also queries others (for example
+`profiles`, `reviews`, `action_plans`, `menu_items`, `voice_notes`) that need the
+same treatment:
 
 | Table touched here | Should become |
 |---|---|

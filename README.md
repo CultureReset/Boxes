@@ -28,10 +28,19 @@ The ask bar does not act on its own. `daemon/src/platform/decide.ts` is the one
 door: a sentence goes to core (`NEXTGENT_CORE_URL`, default
 `http://127.0.0.1:8764`) and is decided by the owner's rules there, ALLOW, ASK
 (the owner is texted a code) or DENY. When core is not reachable the box still
-answers questions that only read (hours, menu, bookings, reviews, events, which apps are installed), and
-**refuses anything that would use the phone or send a text**
-(`daemon/src/platform/gate.ts`). Every `adb` call is pinned to the box's one
-phone, `NEXTGENT_ANDROID_SERIAL`.
+answers questions that only read (hours, menu, bookings, availability, reviews,
+events, which apps are installed), and
+**refuses anything that would tap or change the phone or send a text**
+(`daemon/src/platform/gate.ts`; read-only phone lookups such as `phone.screen`
+still run). Every `adb` call that acts on a phone is pinned to the box's one
+phone, `NEXTGENT_ANDROID_SERIAL` (listing calls, `adb devices -l` and
+`adb track-devices`, are not).
+
+**One exception to know about:** the ask bar posts to `/api/agents/ask`
+(`daemon/src/modules/agents.ts`), which calls `decide()` first. A sentence that
+neither core nor the box's declared phrases recognise is then handed to an
+installed coding-agent CLI (`claude`, `codex`, `opencode`, `copilot`, `crush`,
+`pi`) or to the local model. That fallback does not go through core.
 
 ## Run it
 
@@ -54,8 +63,11 @@ daemon/      the local HTTP server
   voice/     hearing, speaking, and the small model. all on this machine.
 shell/       the TV interface — renders only, holds no business data
 apps/menu/   the QR menu and its editor
-box/         the appliance — image, boot config, systemd units, device agent
+box/         the appliance — image, boot config, systemd units, device agent,
+             Hyprland rules (hypr/), a bench compose file for the voice stack (testbox/)
 services/    an optional cloud path for inbound calls. not required.
+spec/        design notes on the orchestration model (doors, cage, trace bus). not code.
+module.manifest.json   what the Ghost installer reads: id boxes, kind screen, health check
 ```
 
 ## The three devices
@@ -73,8 +85,10 @@ sounds like one thing whichever door somebody came in.
 ## The three rules
 
 **The box holds no database credential.** `daemon/src/platform/` is the only
-thing that knows where the platform is. Everything above it asks for bookings or
-a menu; nothing builds a URL, and nothing issues SQL.
+thing that knows where the platform is (its base URL and token). Nothing in the
+daemon, shell or menu app issues SQL. Request paths are written down in
+`platform/capabilities.ts`, `platform/bookings.ts` and the `/api/business/*`
+handlers in `daemon/src/index.ts`, all going through `platform/client.ts`.
 
 **There is no model in the router.** `daemon/src/platform/router.ts` matches a
 sentence against phrases each capability declared. A sentence either matches or
@@ -160,17 +174,18 @@ Both are the same facts, fetched once. Neither invents one.
 |---|---|---|
 | Hearing | whisper.cpp, `small.en` | on the box |
 | Voice | Piper, falls back to espeak-ng | on the box |
-| Model | any OpenAI-compatible endpoint — Ollama, llama.cpp | on the box, `:11434` |
+| Model | any OpenAI-compatible endpoint (`NODEOS_LLM_URL`, model `NODEOS_LLM_MODEL`); default `http://127.0.0.1:8080/v1`, model `fast` | on the box. The bench compose in `box/testbox/` uses Ollama on `:11434` |
 
-`GET /api/voice` reports what this machine actually has. Nothing is claimed
-that is not installed, and a box with no voice still answers in writing.
+`GET /api/voice` reports which hearing engine and voice engine this machine
+has (`none` when missing), whether the model endpoint answers, and the counts
+below. A box with no voice still answers in writing.
 
 ### The small model's job
 
 It is not answering. It reads a sentence the router did not recognise and picks
 which capability would answer it. The capability then runs for real, and the
 model writes one line from what came back. It is choosing and phrasing, never
-knowing — which is why 3B parameters on a mini-PC is enough.
+knowing — which is why a small model on a mini-PC is enough.
 
 ### The number that matters
 
@@ -180,8 +195,12 @@ Watching it fall is the whole business.
 
 ### Getting a call into it
 
-The box answers on `POST /api/voice/heard` (16kHz mono WAV in, WAV out) or
-`POST /api/voice/text` if something upstream already transcribed.
+The box answers on `POST /api/voice/heard` (JSON `{wav, channel?}` with the
+16kHz mono WAV base64-encoded; the reply is JSON with the turn and the spoken
+answer as a base64 WAV) or `POST /api/voice/text` (`{text, channel?}`) if
+something upstream already transcribed. `/api/voice/sms` takes an inbound text,
+`/api/voice/say` turns a sentence into speech, `/api/voice/aloud` speaks on the
+box's own speakers.
 
 **One constraint worth knowing before wiring a phone up:** Android does not let
 an ordinary app read the audio of a normal cellular call. There is no ADB route
@@ -191,28 +210,62 @@ to it. Three things do work:
 |---|---|
 | **SIP / VoIP app on the phone** | The number is carried over data. The app has the audio because the call is its own. Closest to "the phone answers it". |
 | **Carrier forwarding to a SIP trunk** | The SIM keeps the number; calls forward to something that can hand the box audio. |
-| **Twilio or similar** | A webhook posts audio or a transcript to the box. `services/` holds a working version of this. |
+| **Twilio or similar** | A webhook posts audio or a transcript to the box. Nothing in this repo does that yet: `services/voice/` is a separate cloud-side Twilio-to-OpenAI-Realtime service that answers the call itself and never calls the box's `/api/voice/*`. |
 
 The middle one keeps the owner's number on the owner's SIM and still gives the
 box the audio. It is the one to try first.
 
 ## Adding a capability
 
-One entry in `daemon/src/platform/capabilities.ts`:
+One new file in `daemon/src/platform/capabilities/` (`box.hello.ts` is the
+template). `capabilities.ts` says nothing new should be added to its built-in
+array; files in the folder are loaded at startup, and a broken file or a
+duplicate key is skipped with a warning.
 
 ```ts
-{
-  key: "reviews.recent",
-  summary: "Reviews that arrived recently.",
-  phrases: ["new reviews", "any reviews", "what are people saying"],
+import type { Capability } from "../capabilities.js";
+import { platform, qs } from "../client.js";
+import { platformConfig } from "../config.js";
+
+export default {
+  key: "hours.raw",
+  summary: "The opening hours exactly as the platform holds them.",
+  phrases: ["raw hours", "hours as stored"],
   readOnly: true,
-  run: async () => platform.get(`/api/reviews${qs({ slug })}`),
-}
+  run: async () => {
+    const { slug } = await platformConfig();
+    return platform.get(`/api/dashboard/hours${qs({ slug })}`);
+  },
+} satisfies Capability;
 ```
 
-Then a presenter in `answer.ts` if the default line is not good enough. That is
-the whole extension point. The shell does not change, the router does not
-change, and the phrase is now live on every box that syncs.
+Then a presenter in `answer.ts` if the default line is not good enough. Rebuild
+and restart the daemon. The shell does not change and the router does not
+change.
+
+## What else the daemon does
+
+Everything below is in `daemon/src/index.ts` and `daemon/src/modules/`; it is the
+inherited `Linux-` desktop layer and is not part of the business path above.
+
+- Apps from three providers: `.desktop` files, web apps run in their own browser
+  window, and apps on a phone plugged in over USB (adb, mirrored with scrcpy).
+- An app store over Flathub (flatpak) and pacman, with an apt-based update check.
+- Files (home folder and mounted media only), a calendar (local events plus the
+  platform's bookings, events and specials), notifications, Hyprland windows.
+- Settings: Wi-Fi, Bluetooth, sound, brightness, night light, power, themes and
+  backgrounds (Omarchy tools when present).
+- "Worlds" (per-person or per-context profiles with their own apps, agents, look
+  and optional PIN), three home looks (`dashboard`, `living`, `cinema`),
+  scheduled automations, 19 agent personas, and weather from Open-Meteo.
+- Server-sent events at `/api/events`; extra capabilities are loaded from
+  `daemon/src/platform/capabilities/` (compiled `.js`) at startup. A route-module
+  loader exists (`daemon/src/routes/registry.ts`) but `index.ts` does not call it.
+- Environment variables not named above: `NODEOS_HOST` (bind address, default
+  `127.0.0.1`), `NODEOS_DEMO=1` (force demo mode), `NODEOS_DATA_DIR`,
+  `NODEOS_SHELL_DIST`, `NODEOS_STT_MODEL`, `NODEOS_TTS_VOICE`, `NODEOS_TTS_CMD`,
+  `NODEOS_TTS_URL`, `NODEOS_OWNER_NUMBER` (who `notify.text` texts),
+  `NODE_KERNEL_URL` / `NODE_KERNEL_TOKEN` (override `NEXTGENT_CORE_*`).
 
 ## Where the pieces came from
 
@@ -228,9 +281,16 @@ change, and the phrase is now live on every box that syncs.
 ## What is not done
 
 - `services/voice/` — the cloud call path — still writes to the database
-  directly. 24 call sites. `services/voice/README.md` lists every one and what
-  it should become. The on-box path in `daemon/src/voice/` does not have this
-  problem; it goes through `platform/`.
+  directly. It holds a Supabase key (`config/supabase.js`) and has 66
+  `.from('…')` query sites across 10 files (counted with grep). Its own README
+  lists only 4 files and 24 sites, and has no `package.json` here. The on-box
+  path in `daemon/src/voice/` does not have this problem; it goes through
+  `platform/`.
+- `apps/menu/` still calls daemon routes that do not exist (`POST
+  /api/business/upload`, `POST /api/business/menu`), and its
+  `/admin/qr-menus` page posts to `/api/ai/extract-menu`, `/api/menus`,
+  `/api/items` and `/api/specials`, which the app does not define. Its
+  `.env.example` still lists Supabase variables that nothing reads.
 - Nothing has been tested against a real handset yet. The voice pipeline has
   been exercised end to end with text and with a stub platform.
 - `box/image/` is still the Raspberry Pi build (docker, a udev rule, a screen
@@ -238,7 +298,9 @@ change, and the phrase is now live on every box that syncs.
   phone and `nextgent-ghost-image` owns the services, and the Pi image would
   start a second adb owner. The target is x86, 16GB, with rollback, which the
   installer provides.
-- Nothing writes outward yet. Canonical facts, fan-out and receipts — the
-  "say it once, it lands everywhere" half — are not in this repo. The design is
+- Nothing fans out yet. The daemon can add or delete a menu item and delete a
+  special on the platform (`/api/business/menu/item`,
+  `/api/business/specials/:id`), but canonical facts, fan-out and receipts —
+  the "say it once, it lands everywhere" half — are not in this repo. The design is
   finished and sitting in `cybercheck-orchestrator/db/*.sql` and
   `src/kernel/channels.js`; it needs one decision before it moves.
