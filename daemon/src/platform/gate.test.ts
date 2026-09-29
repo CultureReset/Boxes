@@ -26,3 +26,12 @@ test("the phone and the SIM are never driven from here, not even by a button", (
     assert.match(refusal(cap(key, false), "sentence") ?? "", /uses the phone/, key);
   }
 });
+
+test("when core is running but did not recognise the sentence, it does not say core is down", () => {
+  for (const key of ["notify.text", "phone.tap"]) {
+    const said = refusal(cap(key, false), "sentence", true) ?? "";
+    assert.match(said, /did not recognise/, key);
+    assert.doesNotMatch(said, /core is running/, key);
+  }
+  assert.match(refusal(cap("display.mode.set", false), "sentence", true) ?? "", /did not recognise/);
+});

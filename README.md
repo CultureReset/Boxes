@@ -40,7 +40,7 @@ npm install
 npm run dev          # daemon on :7770, shell on :5173
 npm run dev:menu     # the menu app on :3000
 npm run build        # daemon + shell, what the installer runs
-npm test             # daemon tests (7)
+npm test             # daemon tests (8)
 ```
 
 With no desktop session the daemon starts in demo mode with sample data. On a

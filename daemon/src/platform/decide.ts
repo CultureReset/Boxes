@@ -19,9 +19,11 @@ export interface Decided extends Answer {
 
 export async function decide(text: string, resource = "default"): Promise<Decided> {
   const k = await kernelStatus();
+  let kernelUp = false;
   if (k.available) {
     try {
       const r = await kernelAsk(text, resource);
+      kernelUp = true;
       if (r.routed) {
         const ok = r.state !== "failed";
         return { via: "kernel", lines: [r.reply], ok, capability: r.capability, state: r.state };
@@ -30,5 +32,5 @@ export async function decide(text: string, resource = "default"): Promise<Decide
       /* the kernel went away mid-sentence: answer locally, read-only */
     }
   }
-  return { via: "local", ...(await answer(text)) };
+  return { via: "local", ...(await answer(text, kernelUp)) };
 }
