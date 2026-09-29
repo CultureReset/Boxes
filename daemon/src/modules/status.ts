@@ -58,7 +58,7 @@ export async function backgroundPath(): Promise<string | null> {
 }
 
 export async function capabilities(): Promise<Record<string, boolean>> {
-  const names = ["hyprctl", "nmcli", "bluetoothctl", "wpctl", "brightnessctl", "pacman", "checkupdates", "omarchy-theme-set", "uwsm-app", "gtk-launch", "xdg-open", "systemctl", "notify-send", "claude", "codex", "opencode"];
+  const names = ["hyprctl", "wmctrl", "xdotool", "nmcli", "bluetoothctl", "wpctl", "brightnessctl", "apt", "apt-get", "dpkg-query", "pacman", "checkupdates", "omarchy-theme-set", "uwsm-app", "gtk-launch", "xdg-open", "systemctl", "notify-send", "claude", "codex", "opencode"];
   const out: Record<string, boolean> = {};
   await Promise.all(names.map(async (n) => (out[n] = await has(n))));
   return out;

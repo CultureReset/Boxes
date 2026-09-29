@@ -138,7 +138,7 @@ export interface Package {
   description: string;
   repo: string;
   installed: boolean;
-  source: "flathub" | "pacman";
+  source: "flathub" | "pacman" | "apt";
   appId?: string;
   icon?: string;
 }

@@ -115,6 +115,17 @@ export async function searchPackages(q: string): Promise<PackageResult> {
     icon: a.icon,
   }));
   const f = await check("pacman");
+  if (!f.available && await has("apt")) {
+    if (!needle) return { status: { available: true, demo: false, tool: "apt" }, packages: fromFlathub };
+    const installedRaw = await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"], { timeout: 15000 });
+    const installed = new Set(installedRaw.stdout.split("\n").map((n) => n.replace(/:.*$/, "")));
+    const r = await run("apt-cache", ["search", "--names-only", needle], { timeout: 15000, env: { LC_ALL: "C" } });
+    const out: Package[] = r.stdout.split("\n").filter(Boolean).slice(0, 40).map((line) => {
+      const [name, ...rest] = line.split(" - ");
+      return { name, version: "", description: rest.join(" - "), repo: "apt", installed: installed.has(name), source: "apt" as const };
+    });
+    return { status: { available: true, demo: false, tool: "apt" }, packages: [...out, ...fromFlathub] };
+  }
   if (!f.available) {
     // No pacman is fine as long as Flathub answered; only both failing is a dead end.
     if (fromFlathub.length > 0) return { status: { available: true, demo: false }, packages: fromFlathub };
@@ -167,8 +178,9 @@ async function featured(): Promise<Package[]> {
 }
 
 export async function installedPackages(): Promise<string[]> {
-  if (!(await has("pacman"))) return [];
-  return (await run("pacman", ["-Qeq"])).stdout.trim().split("\n");
+  if (await has("pacman")) return (await run("pacman", ["-Qeq"])).stdout.trim().split("\n");
+  if (await has("dpkg-query")) return (await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"])).stdout.trim().split("\n");
+  return [];
 }
 
 /**
@@ -180,14 +192,15 @@ export async function installedPackages(): Promise<string[]> {
  * app id goes to flatpak (user scope, no root); anything else goes to pacman
  * through pkexec so polkit shows the system password dialog.
  */
-export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman"): Promise<Job> {
+export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman" | "apt"): Promise<Job> {
   if (source === "flathub" || (name && source !== "pacman" && name.includes(".") && flathub.validId(name) && action !== "update")) {
     const f = await flathub.status();
     if (!f.available) throw new HttpError(503, f.reason!);
     return flathub.install(name!, action === "remove");
   }
   if (name && !NAME_RE.test(name)) throw new HttpError(400, "Invalid package name");
-  const f = await check("pacman");
+  const native = source === "apt" || (!(await has("pacman")) && await has("apt")) ? "apt" : "pacman";
+  const f = native === "apt" ? { available: true, demo: false, tool: "apt" } : await check("pacman");
   if (!f.available) throw new HttpError(503, f.reason!);
   const title = action === "update" ? "Updating everything" : `${action === "install" ? "Installing" : "Removing"} ${name}`;
   const job = createJob(action, title, { name });
@@ -202,7 +215,10 @@ export async function packageJob(action: "install" | "remove" | "update", name?:
     }
     let cmd: string;
     let args: string[];
-    if (action === "update" && (await has("omarchy-update"))) {
+    if (native === "apt") {
+      cmd = "pkexec";
+      args = action === "remove" ? ["apt-get", "remove", "-y", name!] : action === "update" ? ["apt-get", "upgrade", "-y"] : ["apt-get", "install", "-y", name!];
+    } else if (action === "update" && (await has("omarchy-update"))) {
       cmd = "omarchy-update";
       args = [];
     } else if (action === "install" && (await has("omarchy-pkg-install"))) {

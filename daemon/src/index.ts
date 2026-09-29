@@ -305,11 +305,11 @@ api.get("/api/store/updates", () => listUpdates());
 api.get("/api/store/status", () => updatesStatus());
 api.post("/api/store/install", ({ body }) => {
   const b = obj(body);
-  return packageJob("install", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : undefined);
+  return packageJob("install", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : b.source === "apt" ? "apt" : undefined);
 });
 api.post("/api/store/remove", ({ body }) => {
   const b = obj(body);
-  return packageJob("remove", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : undefined);
+  return packageJob("remove", str(b.appId ?? b.name, "name", { max: 255 }), b.source === "flathub" ? "flathub" : b.source === "pacman" ? "pacman" : b.source === "apt" ? "apt" : undefined);
 });
 api.get("/api/store/icon/:id", async ({ params, res }) => {
   const img = await flathubIcon(params.id);

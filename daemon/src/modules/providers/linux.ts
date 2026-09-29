@@ -77,7 +77,11 @@ async function scan(): Promise<AppEntry[]> {
         byId.delete(id);
         continue;
       }
-      if (e.OnlyShowIn && !/Hyprland|GNOME|Omarchy|NODE/i.test(e.OnlyShowIn)) continue;
+      if (e.OnlyShowIn) {
+        const desktops = (process.env.XDG_CURRENT_DESKTOP ?? "").split(":").filter(Boolean);
+        const allowed = e.OnlyShowIn.split(";").filter(Boolean);
+        if (desktops.length > 0 && !allowed.some((d) => desktops.some((cur) => cur.toLowerCase() === d.toLowerCase()))) continue;
+      }
       const cats = (e.Categories ?? "").split(";").filter(Boolean);
       const hidden = e.Terminal?.match(/true/i) || HIDE_IDS.test(id) || (cats.length > 0 && cats.every((c) => HIDE_CATEGORIES.has(c)));
       if (hidden) {
@@ -134,7 +138,19 @@ export const linuxProvider: AppProvider = {
       return { ok: r.ok, message: r.ok ? `Removed ${app.name}` : r.stderr.trim() };
     }
     const { packageJob } = await import("../packages.js");
-    const pkg = app.exec.split(/\s+/)[0]?.split("/").pop() ?? localId;
+    if (app.source === "flatpak") {
+      const id = localId;
+      const job = await packageJob("remove", id, "flathub");
+      return { ok: true, message: `Removing ${app.name}`, jobId: job.id };
+    }
+    let pkg = localId;
+    if (await has("dpkg-query")) {
+      const owner = await run("dpkg-query", ["-S", app.desktopFile ?? ""]);
+      const match = owner.stdout.match(/^([^:]+):/);
+      if (match) pkg = match[1];
+    } else {
+      pkg = app.exec.split(/\s+/)[0]?.split("/").pop() ?? localId;
+    }
     const job = await packageJob("remove", pkg);
     return { ok: true, message: `Removing ${app.name}`, jobId: job.id };
   },
