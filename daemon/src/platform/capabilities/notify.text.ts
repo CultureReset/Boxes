@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Capability } from "../capabilities.js";
+import { pinned } from "../phoneSerial.js";
 
 /**
  * Texting the owner, through the phone plugged into the box.
@@ -26,7 +27,7 @@ const run = promisify(execFile);
 const OWNER = (process.env.NODEOS_OWNER_NUMBER ?? "").trim();
 
 async function adb(args: string[], timeout = 20_000): Promise<string> {
-  const { stdout } = await run("adb", args, { timeout, maxBuffer: 32 * 1024 * 1024 });
+  const { stdout } = await run("adb", pinned(args), { timeout, maxBuffer: 32 * 1024 * 1024 });
   return stdout;
 }
 

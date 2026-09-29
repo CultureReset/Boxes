@@ -4,7 +4,7 @@ import { has, stream } from "../exec.js";
 import * as llm from "../voice/llm.js";
 import { HOME } from "../paths.js";
 import { createJob, appendLine, finishJob } from "./jobs.js";
-import { answer } from "../platform/answer.js";
+import { decide } from "../platform/decide.js";
 import { isConnected } from "../platform/config.js";
 import { isDemo } from "./status.js";
 import { activeWorld } from "./worlds.js";
@@ -143,17 +143,17 @@ export async function ask(prompt: string, persona = "auto", providerId?: string,
     // The platform answers first. A sentence that matches a declared capability
     // is handled deterministically against the owner's real data — no model, no
     // shell-out, and every figure came from the platform on this request.
-    if (await isConnected()) {
-      const a = await answer(prompt);
-      if (a.ok || a.capability) {
-        for (const line of a.lines) appendLine(job, line);
-        finishJob(job, a.ok);
-        return;
-      }
-      // UNROUTED. Fall through: a coding agent may still be able to help, and
-      // the unmatched sentence is worth knowing about.
-      appendLine(job, a.lines[0]);
+    // The kernel's rules first when it is running (it may text the owner for a
+    // YES); then this box's own read-only answers.
+    const a = await decide(prompt);
+    if (a.via === "kernel" || a.ok || a.capability) {
+      for (const line of a.lines) appendLine(job, line);
+      finishJob(job, a.ok);
+      return;
     }
+    // UNROUTED. Fall through: a coding agent may still be able to help, and
+    // the unmatched sentence is worth knowing about.
+    if (await isConnected()) appendLine(job, a.lines[0]);
 
     const providers = await listProviders();
     const provider = providers.find((p) => p.id === providerId && p.installed) ?? providers.find((p) => p.isDefault && p.installed) ?? providers.find((p) => p.installed);

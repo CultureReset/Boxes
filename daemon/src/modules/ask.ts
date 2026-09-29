@@ -1,4 +1,4 @@
-import { read, act, connect } from "./kernel.js";
+import { read, act, connect, offers } from "./kernel.js";
 
 /**
  * A sentence said at the television becomes a task the kernel decided on.
@@ -86,6 +86,26 @@ export async function ask(said: string, resource: string): Promise<Answer> {
   const handshake = await connect();
   if (!handshake.status.available) {
     return { said: text, reply: handshake.status.reason ?? "The kernel is not reachable.", routed: false };
+  }
+
+  // A kernel that understands whole sentences (slots and all: "text +1555…
+  // running late") takes the sentence as it was said.
+  if (await offers("intent")) {
+    const r = await act<{ resolved: boolean; capability?: string; state?: string; result?: string | null; task_id?: string }>(
+      "intent",
+      { text, requested_by: "tv" },
+    );
+    if (!r.resolved) return { said: text, reply: UNROUTED, routed: false };
+    const state = r.state ?? "working";
+    return {
+      said: text,
+      routed: true,
+      capability: r.capability,
+      taskId: r.task_id,
+      state,
+      reply: sentenceFor(state, r.result ?? null),
+      task: r as unknown as Record<string, unknown>,
+    };
   }
 
   const { items } = await read<{ items: Capability[] }>("capabilities");

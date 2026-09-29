@@ -20,8 +20,11 @@ import { OK, type FeatureStatus } from "./features.js";
  * two would drift.
  */
 
-const BASE = process.env.NODE_KERNEL_URL ?? "http://127.0.0.1:8765";
-const TOKEN = process.env.NODE_KERNEL_TOKEN ?? "";
+// On a Ghost box the kernel is NEXT GENT core. Its address and token are the
+// ones every other service on the box already reads, so nothing is set twice.
+// (8765 is androidd, the phone driver, not the kernel.)
+const BASE = process.env.NODE_KERNEL_URL ?? process.env.NEXTGENT_CORE_URL ?? "http://127.0.0.1:8764";
+const TOKEN = process.env.NODE_KERNEL_TOKEN ?? process.env.NEXTGENT_CORE_TOKEN ?? "";
 const TIMEOUT_MS = 8000;
 
 /** The kernel interface this daemon was written against. */
@@ -96,6 +99,12 @@ export async function connect(): Promise<Handshake> {
     handshake = unavailable(`Cannot reach the kernel at ${BASE}. ${(e as Error).message}`);
   }
   return handshake;
+}
+
+/** Whether the kernel offers an action by that name. */
+export async function offers(action: string): Promise<boolean> {
+  const h = await connect();
+  return !!h.declared?.actions?.[action];
 }
 
 /** Nothing below runs unless the handshake passed. */

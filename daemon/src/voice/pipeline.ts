@@ -1,5 +1,7 @@
-import { answer, spoken, type Answer } from "../platform/answer.js";
-import { route, UNROUTED } from "../platform/router.js";
+import { answer, spoken } from "../platform/answer.js";
+import { UNROUTED } from "../platform/router.js";
+import { decide } from "../platform/decide.js";
+import { refusal } from "../platform/gate.js";
 import { BY_KEY } from "../platform/capabilities.js";
 import { transcribe, model as sttModel } from "./stt.js";
 import { speak, sayAloud, engine as ttsEngine, type Speech } from "./tts.js";
@@ -34,7 +36,7 @@ export interface Turn {
   lines: string[];
   capability?: string;
   /** How it was resolved. Worth logging: when `model` climbs, write more phrases. */
-  via: "router" | "model" | "unrouted";
+  via: "kernel" | "router" | "model" | "unrouted";
   channel: Channel;
   at: string;
 }
@@ -47,13 +49,13 @@ export async function handle(said: string, channel: Channel = "screen"): Promise
   const at = new Date().toISOString();
   if (!text) return record({ said, reply: "", lines: [], via: "unrouted", channel, at });
 
-  // 1 — The router. Declared phrases only. There is no model in this path.
-  const matched = route(text);
-  if (matched) {
-    const a: Answer = await answer(text);
+  // 1 — The kernel's rules when it is running, else this box's read-only
+  //     answers (platform/decide.ts). Declared phrases only; no model here.
+  const d = await decide(text);
+  if (d.via === "kernel" || d.capability) {
     // A screen gets the list. A phone gets a sentence. Same facts either way.
-    const heard = channel === "screen" ? a.lines.join(" ") : spoken(a.capability, a.data, a.lines);
-    return record({ said: text, reply: heard, lines: a.lines, capability: a.capability, via: "router", channel, at });
+    const heard = channel === "screen" || d.via === "kernel" ? d.lines.join(" ") : spoken(d.capability, d.data, d.lines);
+    return record({ said: text, reply: heard, lines: d.lines, capability: d.capability, via: d.via === "kernel" ? "kernel" : "router", channel, at });
   }
 
   // 2 — Unrecognised. A small model may pick a capability, which then runs for
@@ -61,7 +63,8 @@ export async function handle(said: string, channel: Channel = "screen"): Promise
   if (await llm.available()) {
     const { capability } = await llm.choose(text);
     const cap = capability ? BY_KEY.get(capability) : undefined;
-    if (cap) {
+    // A model may only pick what a sentence could run here: read-only.
+    if (cap && !refusal(cap, "sentence")) {
       try {
         const data = await cap.run({});
         const line = (await llm.phrase(text, data)).trim();

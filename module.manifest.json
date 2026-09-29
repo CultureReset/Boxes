@@ -1,0 +1,27 @@
+{
+  "schema_version": 1,
+  "id": "boxes",
+  "version": "0.1.0",
+  "kind": "screen",
+  "name": "The TV: home screens, apps, voice and the ask bar",
+  "provides": {
+    "capabilities": [],
+    "events": [],
+    "endpoints": ["http:tv"]
+  },
+  "requires": {
+    "capabilities": [],
+    "events": [],
+    "modules": []
+  },
+  "config": [
+    {"name": "NEXTGENT_CORE_URL", "required": false, "description": "The kernel (NEXT GENT core); every sentence that would change something goes through its rules. Default http://127.0.0.1:8764"},
+    {"name": "NEXTGENT_CORE_TOKEN", "required": false, "description": "Token core demands; the same one the other services on the box use"},
+    {"name": "NEXTGENT_ANDROID_SERIAL", "required": false, "description": "The box's one phone; every adb call here is pinned to it"},
+    {"name": "NODEOS_PORT", "required": false, "description": "Where the TV daemon listens; default 7770"},
+    {"name": "NODEOS_API_URL", "required": false, "description": "Platform API for read-only business answers (menu, hours, bookings)"},
+    {"name": "NODEOS_API_TOKEN", "required": false, "description": "Token for that platform API"},
+    {"name": "NODEOS_LLM_URL", "required": false, "description": "Local model endpoint (OpenAI-compatible); optional"}
+  ],
+  "health": {"kind": "http", "target": "http://127.0.0.1:7770/api/status", "timeout_s": 15}
+}

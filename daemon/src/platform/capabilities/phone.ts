@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { Capability } from "../capabilities.js";
+import { pinned } from "../phoneSerial.js";
 
 /**
  * The phone, as capabilities.
@@ -23,7 +24,7 @@ const run = promisify(execFile);
 const TIMEOUT = 20_000;
 
 async function adb(args: string[]): Promise<string> {
-  const { stdout } = await run("adb", args, {
+  const { stdout } = await run("adb", pinned(args), {
     timeout: TIMEOUT,
     maxBuffer: 32 * 1024 * 1024,
   });

@@ -36,7 +36,8 @@ import { answer } from "./platform/answer.js";
 import { CAPABILITIES, BY_KEY } from "./platform/capabilities.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
-import { ask as kernelAsk } from "./modules/ask.js";
+import { decide } from "./platform/decide.js";
+import { refusal } from "./platform/gate.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 
@@ -109,8 +110,7 @@ api.post("/api/platform/connect", async ({ body }) => {
 api.post("/api/ask", async ({ body }) => {
   const text = str(obj(body).text, "text", { max: 500 });
   const resource = str(obj(body).resource, "resource", { optional: true, max: 128 }) || "default";
-  const k = await kernelStatus();
-  return k.available ? kernelAsk(text, resource) : answer(text);
+  return decide(text, resource);
 });
 
 /**
@@ -130,6 +130,8 @@ api.post("/api/capability", async ({ body }) => {
 
   const cap = BY_KEY.get(key);
   if (!cap) throw new HttpError(404, `No capability called "${key}"`);
+  const refused = refusal(cap, "button");
+  if (refused) throw new HttpError(403, refused);
 
   // Slots arrive as strings; that's what run() expects.
   const raw = obj(b.args ?? {});
