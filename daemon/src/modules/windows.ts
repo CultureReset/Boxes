@@ -28,9 +28,18 @@ export async function listWindows(): Promise<WindowEntry[]> {
     const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";
     const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";
     const out: WindowEntry[] = [];
-    for (const line of r.stdout.split("
-").filter(Boolean)) {
-      const m = line.match(/^(0x[0-9a-f]+)\\s+(\\d+)\\s+(\\d+)\\s+\\S+\\s+\\S+\\s+\\S+\\s+\\S+\\s+(\\S+)\\s+\\S+\\s+(.*)$/i);
+    // Two things were broken here and they stopped the whole daemon compiling.
+    //
+    // The split argument was a literal newline inside the quotes rather than
+    // the escape "\n", which is a syntax error — and because it is a syntax
+    // error the build never got far enough to report anything else.
+    //
+    // The regex was double-escaped: \\s in a regex literal means a literal
+    // backslash followed by an s, not whitespace. It would have compiled and
+    // then matched nothing, so every window came back missing on X11 with no
+    // error to explain it.
+    for (const line of r.stdout.split("\n").filter(Boolean)) {
+      const m = line.match(/^(0x[0-9a-f]+)\s+(\d+)\s+(\d+)\s+\S+\s+\S+\s+\S+\s+\S+\s+(\S+)\s+\S+\s+(.*)$/i);
       if (!m) continue;
       const [, address, workspace, pid, cls, title] = m;
       out.push({ address, class: cls, title, workspace: Number(workspace), pid: Number(pid), focused: address.toLowerCase() === activeHex, appId: await appIdForWindow(cls.split(".").pop() ?? cls, title) });
@@ -104,8 +113,7 @@ export async function watchHyprland(): Promise<void> {
     client.on("data", (chunk) => {
       buf += chunk.toString("utf8");
       let idx: number;
-      while ((idx = buf.indexOf("
-")) >= 0) {
+      while ((idx = buf.indexOf("\n")) >= 0) {
         const line = buf.slice(0, idx);
         buf = buf.slice(idx + 1);
         const ev = line.split(">>")[0];

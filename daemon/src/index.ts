@@ -336,9 +336,16 @@ const server = http.createServer(async (req, res) => {
       allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);
     } catch {}
     if (!allowed) {
-    sendJson(res, 403, { error: "Forbidden origin" });
-    return;
+      sendJson(res, 403, { error: "Forbidden origin" });
+      return;
+    }
   }
+  // The brace above was missing, so `if (origin)` swallowed everything below
+  // it and TypeScript reported the error at the end of the file. Two effects:
+  // it would not compile, and had it compiled, the /api/ routing would only
+  // have run for requests that arrived WITH an Origin header — which the shell
+  // does not send. Every API call from the shell would have fallen through to
+  // serveStatic and come back as HTML.
   if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });
     return;
