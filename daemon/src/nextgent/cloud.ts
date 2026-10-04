@@ -112,7 +112,14 @@ export async function businessToken(force = false): Promise<string> {
     token = { company: id, value: d.token, expiresAt: Date.parse(d.expiresAt ?? "") || Date.now() + 60_000 };
     return d.token;
   });
-  pending = work.finally(() => (pending = null));
+  // Share `work` itself with concurrent callers. A promise chained off it
+  // (work.finally(...)) rejects alongside it with nobody awaiting it, which
+  // Node treats as an unhandled rejection and exits the daemon.
+  pending = work;
+  const clear = () => {
+    if (pending === work) pending = null;
+  };
+  work.then(clear, clear);
   return work;
 }
 
