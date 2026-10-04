@@ -15,6 +15,7 @@
     "typescript": "^5.7.0"
   },
   "dependencies": {
+    "@nextgent/app-engine": "file:../../App-build-/packages/engine",
     "qrcode-generator": "^1.5.2"
   }
 }
