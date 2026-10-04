@@ -7,8 +7,19 @@ import { Sheet } from "../components/Sheet";
 import { Toggle, Empty } from "../components/ui";
 import { useToast } from "../state/toast";
 import { sameDay, timeRange, longDate } from "../lib/format";
+import type { CalKind } from "../api/nextgent";
 
-const COLORS = ["#0a84ff", "#30d158", "#ff9f0a", "#ff453a", "#bf5af2", "#64d2ff", "#ff375f"];
+/** How each kind of calendar item is drawn (DECISIONS.md #13): one existing colour token and one label per kind. */
+export const KIND_STYLE: Record<CalKind, { color: string; label: string }> = {
+  booking: { color: "var(--blue)", label: "Booking" },
+  event: { color: "var(--purple)", label: "Event" },
+  availability: { color: "var(--teal)", label: "Availability" },
+  task: { color: "var(--orange)", label: "Task" },
+  approval: { color: "var(--red)", label: "Approval" },
+  local: { color: "var(--green)", label: "This computer" },
+};
+
+const COLORS =["#0a84ff", "#30d158", "#ff9f0a", "#ff453a", "#bf5af2", "#64d2ff", "#ff375f"];
 
 export function Calendar() {
   const [cursor, setCursor] = useState(() => new Date());
