@@ -38,6 +38,8 @@ import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Chan
 import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
 import { decide } from "./platform/decide.js";
 import { refusal } from "./platform/gate.js";
+import { registerNextgent } from "./nextgent/routes.js";
+import { localAndroidEnabled } from "./nextgent/env.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 
@@ -182,6 +184,9 @@ api.get("/api/business/availability", async ({ query }) => {
   const { slug } = await platformConfig();
   return platform.get(`/api/availability${qs({ slug, from: query.get("from") ?? "", to: query.get("to") ?? "" })}`);
 });
+
+// ---- NEXT GENT: the account, the business and the agent phone ----------
+registerNextgent(api);
 
 // ---- Voice ---------------------------------------------------------------
 // One entry point. A sentence spoken at the television, said down the phone,
@@ -431,7 +436,7 @@ server.listen(PORT, HOST, async () => {
   console.log(`NODE daemon listening on http://${HOST}:${PORT}${s.demo ? " (demo mode: no compositor detected)" : ""}`);
   void watchHyprland();
   void watchDbus();
-  void watchAndroid();
+  if (localAndroidEnabled()) void watchAndroid();
   startScheduler();
   // Periodic status heartbeat keeps battery, network and clock fresh in the shell.
   setInterval(async () => {

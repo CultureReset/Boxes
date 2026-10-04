@@ -3,6 +3,7 @@ import { PHONE_SERIAL } from "../../platform/phoneSerial.js";
 import { has, launchDetached, run } from "../../exec.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
+import { localAndroidEnabled } from "../../nextgent/env.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
 
@@ -26,6 +27,8 @@ export interface AndroidDevice {
 
 export interface AndroidStatus {
   available: boolean;
+  /** True when nextgent-platform, not this provider, owns the phone. */
+  managed?: boolean;
   reason?: string;
   scrcpy: boolean;
   scrcpyVersion?: string;
@@ -95,6 +98,8 @@ async function scrcpyInfo(): Promise<{ ok: boolean; version?: string }> {
 }
 
 export async function androidStatus(): Promise<AndroidStatus> {
+  // nextgent-platform owns the phone; this computer's screen only shows it (Phone).
+  if (!localAndroidEnabled()) return { available: false, managed: true, reason: "The agent phone is controlled by nextgent-platform. Boxes shows it on the Phone screen.", scrcpy: false, devices: [] };
   const demo = await isDemo();
   if (!(await has("adb"))) {
     return demo ? { available: true, scrcpy: true, scrcpyVersion: "3.3", devices: [DEMO_DEVICE] } : { available: false, reason: "Install android-tools and scrcpy from the App Store to connect a phone.", scrcpy: false, devices: [] };

@@ -7,12 +7,17 @@ import { linuxProvider, refreshLinuxApps } from "./providers/linux.js";
 import { webProvider, openUrlAsApp } from "./providers/webapps.js";
 import { androidProvider } from "./providers/android.js";
 import { activeWorld } from "./worlds.js";
+import { localAndroidEnabled } from "../nextgent/env.js";
 
 /**
  * The app registry. Providers are interchangeable: add or remove one here and
  * every screen (Home, Apps, search, Continue row) follows without changes.
  */
-export const PROVIDERS: AppProvider[] = [linuxProvider, webProvider, androidProvider];
+/**
+ * The phone is nextgent-platform's alone (plan §10): Boxes' own adb provider is
+ * off unless NEXTGENT_LOCAL_ANDROID=1 (a desktop with no nextgent-platform).
+ */
+export const PROVIDERS: AppProvider[] = [linuxProvider, webProvider, ...(localAndroidEnabled() ? [androidProvider] : [])];
 
 function provider(id: string): AppProvider {
   const p = PROVIDERS.find((x) => x.id === id);

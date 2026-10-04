@@ -142,7 +142,10 @@ async function requirePhone(): Promise<string[] | { ok: false; message: string }
   };
 }
 
-export default [
+import { localAndroidEnabled } from "../../nextgent/env.js";
+
+/** Off unless NEXTGENT_LOCAL_ANDROID=1: on a NEXT GENT computer nextgent-platform alone drives the phone. */
+const PHONE: Capability[] = [
   {
     key: "phone.devices",
     summary: "Which Android phones are plugged into this box.",
@@ -227,4 +230,6 @@ export default [
       return { ok: true, tapped: found.text || found.desc || found.id, at: hit.center };
     },
   },
-] satisfies Capability[];
+];
+
+export default localAndroidEnabled() ? PHONE : [];
