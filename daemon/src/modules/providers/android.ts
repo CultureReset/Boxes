@@ -164,15 +164,30 @@ function windowTitle(pkg: string): string {
   return pkg === MIRROR_ID ? "NODE Phone" : `NODE Android ${pkg}`;
 }
 
+/** scrcpy arguments every window this provider opens starts from. */
+function scrcpyBase(serial: string, pkg: string): string[] {
+  return ["-s", serial, "--window-title", windowTitle(pkg), "--stay-awake", "--audio-codec=opus"];
+}
+
+/**
+ * The phone mirror is view-only. --no-control makes scrcpy refuse every tap,
+ * key and swipe from the window, so nobody at the TV can operate the agent
+ * phone from here: driving it goes through nextgent-platform's policy,
+ * approvals and journal, never through a mirror.
+ */
+export function mirrorArgs(serial: string): string[] {
+  return [...scrcpyBase(serial, MIRROR_ID), "--no-control"];
+}
+
 async function launch(pkg: string): Promise<{ ok: boolean; message: string }> {
   const dev = await readyDevice();
   if (!dev) return { ok: false, message: "No phone connected" };
   if (await isDemo()) return { ok: true, message: pkg === MIRROR_ID ? `Would mirror ${dev.model}` : `Would open ${KNOWN[pkg]?.name ?? humanize(pkg)} on ${dev.model}` };
   const sc = await scrcpyInfo();
-  const base = ["-s", dev.serial, "--window-title", windowTitle(pkg), "--stay-awake", "--audio-codec=opus"];
+  const base = scrcpyBase(dev.serial, pkg);
   if (pkg === MIRROR_ID) {
     if (!sc.ok) return { ok: false, message: "Install scrcpy to mirror the phone" };
-    return launchDetached("scrcpy", base) ? { ok: true, message: `Mirroring ${dev.model}` } : { ok: false, message: "Could not start scrcpy" };
+    return launchDetached("scrcpy", mirrorArgs(dev.serial)) ? { ok: true, message: `Mirroring ${dev.model}` } : { ok: false, message: "Could not start scrcpy" };
   }
   const major = Number(sc.version?.split(".")[0] ?? 0);
   if (sc.ok && major >= 3) {
