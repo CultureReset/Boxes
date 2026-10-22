@@ -1,3 +1,4 @@
+import { existsSync } from "node:fs";
 import { has, launchDetached } from "../../exec.js";
 import { WorldStore } from "../worlds.js";
 import { catalogEntries } from "../catalog.js";
@@ -22,6 +23,7 @@ export interface WebApp {
   comment: string;
   color: string;
   category: string;
+  icon?: string;
   added: boolean;
 }
 
@@ -33,7 +35,7 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: "", categories: [w.category], source: "webapp", color: w.color, url: w.url };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url };
 }
 
 /**

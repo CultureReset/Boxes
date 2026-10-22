@@ -82,6 +82,7 @@ async function fromFile(): Promise<CatalogEntry[]> {
         url: e.url!,
         comment: e.comment ?? "",
         color: e.color ?? colorFor(e.name!),
+        icon: typeof (e as { icon?: string }).icon === "string" ? (e as { icon?: string }).icon : undefined,
         category: e.category ?? "Suggested",
         source: "file" as const,
       }));
