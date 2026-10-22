@@ -91,11 +91,12 @@ export function AppsRow(_: RowProps) {
   const { apps } = useApps();
   const { data: windows } = useApi<WindowEntry[]>("/api/windows", ["windows"]);
   const launch = useLaunch();
-  const list = (apps ?? []).filter((a) => a.provider === "linux");
+  const all = apps ?? [];
+  const list = [...all.filter((a) => a.provider === "web"), ...all.filter((a) => a.provider === "linux")];
   return (
     <Section title="My Apps" onTitle={() => navigate("apps")}>
       {apps === null && [1, 2, 3, 4].map((i) => <Skeleton key={i} h={92} w={300} />)}
-      {list.slice(0, 10).map((a) => {
+      {list.slice(0, 24).map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
         return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.comment || "App"} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} />;
       })}
