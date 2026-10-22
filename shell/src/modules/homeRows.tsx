@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { AttentionRow, ContinueRow, AppsRow, WebAppsRow, PhoneRow, TodayRow, RecentFilesRow, AutomationsRow } from "../screens/homeRows";
+import { AttentionRow, ContinueRow, AppsRow, WebAppsRow, PhoneRow, TodayRow, RecentFilesRow, AutomationsRow, ServicesRow } from "../screens/homeRows";
 
 export interface RowProps {
   onJob: (id: string) => void;
@@ -26,6 +26,7 @@ export const HOME_ROWS: HomeRowModule[] = [
   { id: "today", title: "Today", description: "Today's calendar", component: TodayRow },
   { id: "recent-files", title: "Recent Files", description: "Files you touched recently", component: RecentFilesRow },
   { id: "automations", title: "Automations", description: "Scheduled helpers", component: AutomationsRow },
+  { id: "services", title: "Running on This Computer", description: "Services, containers and web UIs on this machine", component: ServicesRow },
 ];
 
 export function homeRow(id: string): HomeRowModule | undefined {

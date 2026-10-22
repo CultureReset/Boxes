@@ -1,7 +1,7 @@
 import { useMemo } from "react";
-import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb } from "lucide-react";
+import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
-import type { AndroidStatus, AppEntry, Automation, CalendarEvent, FileEntry, Notification, WindowEntry } from "../api/types";
+import type { AndroidStatus, AppEntry, Automation, CalendarEvent, FileEntry, Notification, ServicesReport, WindowEntry } from "../api/types";
 import { useStatus } from "../state/status";
 import { useToast } from "../state/toast";
 import { Section } from "../components/Section";
@@ -175,6 +175,29 @@ export function AutomationsRow({ onJob }: RowProps) {
         return <ItemCard key={t.name} icon={<span className="app-icon" style={{ ["--ic" as string]: "#2b2f3a" }}><Icon size={26} /></span>} title={t.name} subtitle={t.description} meta={<Pill><Plus size={11} /> Add</Pill>} onClick={() => void api.post("/api/automations", t).then(() => toast(`Added ${t.name}`))} />;
       })}
       {menu.element}
+    </Section>
+  );
+}
+
+export function ServicesRow(_: RowProps) {
+  const { data } = useApi<ServicesReport>("/api/services");
+  if (!data) return null;
+  const linked = data.ports.filter((p) => p.url);
+  const running = data.services.filter((s) => s.running);
+  const down = data.services.filter((s) => !s.running && s.kind === "docker");
+  const open = (url: string) => window.open(url, "_blank", "noopener");
+  const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
+  return (
+    <Section title="Running on This Computer">
+      {linked.map((p) => (
+        <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} onClick={() => open(p.url!)} />
+      ))}
+      {down.map((s) => (
+        <ItemCard key={`d${s.name}`} icon={icon("#ff453a")} title={s.name} subtitle={s.description} meta={<><Dot state="alert" /> {s.state}</>} />
+      ))}
+      {running.map((s) => (
+        <ItemCard key={`${s.kind}${s.name}`} icon={icon(s.kind === "docker" ? "#64d2ff" : "#5e5ce6")} title={s.name} subtitle={s.description} meta={<><Dot state="on" /> {s.kind === "docker" ? "Container" : "Service"}</>} />
+      ))}
     </Section>
   );
 }

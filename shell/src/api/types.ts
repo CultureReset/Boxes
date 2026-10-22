@@ -276,3 +276,23 @@ export interface Weather {
   summary: string;
   demo: boolean;
 }
+
+export interface ServiceEntry {
+  kind: "systemd" | "docker";
+  name: string;
+  description: string;
+  state: string;
+  running: boolean;
+}
+
+export interface PortEntry {
+  port: number;
+  address: string;
+  process: string;
+  url: string | null;
+}
+
+export interface ServicesReport {
+  services: ServiceEntry[];
+  ports: PortEntry[];
+}
