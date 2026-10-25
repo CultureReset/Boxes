@@ -133,7 +133,7 @@ export async function personasForWorld(): Promise<Array<Persona & { id: string }
     .map(([id, p]) => ({ id, ...p }));
 }
 
-export async function ask(prompt: string, persona = "auto", providerId?: string, cwd?: string): Promise<Job> {
+export async function ask(prompt: string, persona = "auto", providerId?: string, cwd?: string, model?: string): Promise<Job> {
   const world = await activeWorld();
   if (world.agents && persona !== "auto" && !world.agents.includes(persona)) persona = "general";
   if (persona === "auto" || !PERSONAS[persona]) persona = route(prompt, world.agents);
@@ -172,7 +172,7 @@ export async function ask(prompt: string, persona = "auto", providerId?: string,
       return;
     }
     if (provider.id === LOCAL_PROVIDER) {
-      const spoke = await llm.converse(personaDef.system, prompt, (line) => appendLine(job, line));
+      const spoke = await llm.converse(personaDef.system, prompt, (line) => appendLine(job, line), undefined, model);
       if (!spoke) appendLine(job, "The local model stopped answering. Check that it is running.");
       finishJob(job, spoke);
       return;

@@ -62,6 +62,10 @@ export function AgentsPopover({ anchor, personas, onPick, onClose, onJob }: { an
             <ChevronRight size={16} />
           </button>
         )}
+        <button type="button" className="list-row all-agents" onClick={() => { navigate("agents"); onClose(); }}>
+          <span className="ic" style={{ ["--ic" as string]: "#0a84ff" }}><ChevronRight size={16} /></span>
+          <span className="stack grow"><span className="t">See all agents &amp; engines</span><span className="s">Every harness and specialist, pick your default</span></span>
+        </button>
       </div>
     </div>
   );

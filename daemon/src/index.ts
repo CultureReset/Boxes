@@ -289,7 +289,11 @@ api.post("/api/backgrounds/set", ({ body }) => setBackground(str(obj(body).file,
 api.get("/api/agents", async () => ({ providers: await listProviders(), personas: (await personasForWorld()).map(({ system, ...p }) => p) }));
 api.post("/api/agents/ask", ({ body }) => {
   const b = obj(body);
-  return ask(str(b.prompt, "prompt", { max: 8000 }), str(b.persona, "persona", { optional: true, max: 32 }) || "general", str(b.provider, "provider", { optional: true, max: 32 }) || undefined);
+  return ask(str(b.prompt, "prompt", { max: 8000 }), str(b.persona, "persona", { optional: true, max: 32 }) || "general", str(b.provider, "provider", { optional: true, max: 32 }) || undefined, undefined, str(b.model, "model", { optional: true, max: 128 }) || undefined);
+});
+api.get("/api/llm/models", async () => {
+  const { chatModels } = await import("./voice/llm.js");
+  return chatModels();
 });
 api.get("/api/automations", async () => ({ items: await listAutomations(), templates: TEMPLATES }));
 api.post("/api/automations", ({ body }) => saveAutomation(obj(body) as Partial<Automation>));

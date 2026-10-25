@@ -10,6 +10,7 @@ import { navigate } from "../lib/router";
 import { timeAgo } from "../lib/format";
 import { iconFor } from "../lib/icons";
 import { useToast } from "../state/toast";
+import { useEffect, useState } from "react";
 import { useWorld } from "../state/world";
 import type { ScreenProps } from "../modules/registry";
 
@@ -28,6 +29,10 @@ export function Agents({ onJob }: ScreenProps) {
   const doneToday = (jobs ?? []).filter((j) => j.status !== "running" && new Date(j.startedAt).toDateString() === new Date().toDateString()).length;
   const installed = (info?.providers ?? []).filter((p) => p.installed);
   const personas = (info?.personas ?? []).filter((p) => p.id !== "auto");
+  const [picked, setPicked] = useState<string>(() => localStorage.getItem("node.provider") ?? "");
+  useEffect(() => { picked ? localStorage.setItem("node.provider", picked) : localStorage.removeItem("node.provider"); }, [picked]);
+  const serverDefault = info?.providers.find((p) => p.isDefault)?.id;
+  const effective = picked || serverDefault;
 
   return (
     <>
@@ -38,6 +43,26 @@ export function Agents({ onJob }: ScreenProps) {
         <StatTile icon={<Clock size={22} />} value={doneToday} label="tasks completed today" />
         <FeatureTile icon={<Sparkles size={22} />} title={installed.length ? `Powered by ${installed.find((p) => p.isDefault)?.name ?? installed[0].name}` : "Add an AI engine"} subtitle={installed.length ? "Runs locally, no terminal" : "Claude Code, Codex or OpenCode"} onClick={() => navigate("apps")} />
       </div>
+
+      <section className="section">
+        <div className="section-h"><h2>Engines (harnesses)</h2></div>
+        <p className="tiny" style={{ margin: "0 0 10px", color: "var(--text-2)" }}>Which AI runs your agents. Tap one to use it from this phone.</p>
+        <div className="roster engines">
+          {(info?.providers ?? []).map((p) => (
+            <div key={p.id} className={`card${effective === p.id ? " picked" : ""}`}>
+              <div className="rh">
+                <span className="app-icon sm" style={{ ["--ic" as string]: p.installed ? "#30d158" : "#3a4250" }}><Bot size={20} /></span>
+                <span className="stack"><span className="t">{p.name}</span><span className="s">{p.installed ? "Installed" : "Not installed"}{p.isDefault ? " · machine default" : ""}{effective === p.id ? " · in use" : ""}</span></span>
+              </div>
+              <div className="foot">
+                {p.installed
+                  ? <button type="button" className="btn sm pillbtn" disabled={effective === p.id} onClick={() => { setPicked(p.id === serverDefault ? "" : p.id); toast(`Using ${p.name}`); }}>{effective === p.id ? <><Check size={12} /> Selected</> : "Use this"}</button>
+                  : <button type="button" className="btn sm" onClick={() => navigate("apps")}>Get it</button>}
+              </div>
+            </div>
+          ))}
+        </div>
+      </section>
 
       <section className="section">
         <div className="section-h"><h2>The workforce</h2><button type="button" className="link" onClick={() => askWith("auto")}>Ask the Orchestrator <Sparkles size={14} /></button></div>

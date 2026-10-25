@@ -29,11 +29,11 @@ export function DashboardHome({ onJob }: ScreenProps) {
 
   return (
     <>
-      <Hero title={`${greeting()}, ${name}.`} subtitle={active?.tagline || "Everything that matters today, in one place."} />
+      <Hero title={name && name.trim() ? `${greeting()}, ${name.trim()}.` : `${greeting()}.`} subtitle={active?.tagline || "Everything that matters today, in one place."} />
       <div className="stats">
         <StatTile icon={<Calendar size={22} />} value={events ? events.length : "–"} label={`meeting${events?.length === 1 ? "" : "s"} today`} onClick={() => navigate("calendar")} />
         <StatTile icon={<AppWindow size={22} />} value={windows ? windows.length : "–"} label={`app${windows?.length === 1 ? "" : "s"} open`} onClick={() => navigate("apps")} />
-        <StatTile icon={<Download size={22} />} value={status?.updates ?? "–"} label={status == null ? "updates available" : status.updates == null ? "updates: can\u2019t check" : status.updates === 1 ? "update available" : "updates available"} onClick={() => navigate("settings", "updates")} />
+        <StatTile icon={<Download size={22} />} value={status == null ? "…" : status.updates ?? "n/a"} label={status == null ? "updates available" : status.updates == null ? "updates: can\u2019t check" : status.updates === 1 ? "update available" : "updates available"} onClick={() => navigate("settings", "updates")} />
         <FeatureTile icon={<Sparkles size={22} />} title={runningJobs.length ? "Your AI agents are active" : "Your AI agents are ready"} subtitle={`${runningJobs.length ? `Working on ${runningJobs.length} · ` : ""}${running.length} automation${running.length === 1 ? "" : "s"} running`} onClick={() => navigate("agents")} />
       </div>
       {(layout?.rows ?? []).filter((r) => r.enabled).map((r) => {

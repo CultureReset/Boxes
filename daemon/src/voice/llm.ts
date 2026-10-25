@@ -76,6 +76,7 @@ export async function converse(
   user: string,
   onLine: (line: string) => void,
   signal?: AbortSignal,
+  model?: string,
 ): Promise<boolean> {
   let res: Response;
   try {
@@ -84,7 +85,7 @@ export async function converse(
       signal,
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
-        model: MODEL,
+        model: model || MODEL,
         messages: [
           { role: "system", content: system },
           { role: "user", content: user },
@@ -181,4 +182,16 @@ export async function phrase(sentence: string, data: unknown): Promise<string> {
     ],
     90,
   );
+}
+
+/** Chat-capable models the local server offers (speech/embedding models excluded). */
+export async function chatModels(): Promise<{ models: string[]; default: string }> {
+  try {
+    const res = await fetch(`${BASE.replace(/\/$/, "")}/models`, { signal: AbortSignal.timeout(3000) });
+    const j = (await res.json()) as { data?: Array<{ id: string }> };
+    const skip = /(asr|whisper|embed|tts|rerank|speech|kokoro|piper|clip|vision-enc)/i;
+    return { models: (j.data ?? []).map((m) => m.id).filter((id) => !skip.test(id)), default: MODEL };
+  } catch {
+    return { models: [], default: MODEL };
+  }
 }
