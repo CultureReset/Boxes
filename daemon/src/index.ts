@@ -295,6 +295,13 @@ api.get("/api/llm/models", async () => {
   const { chatModels } = await import("./voice/llm.js");
   return chatModels();
 });
+api.get("/api/chats", async () => (await import("./modules/chats.js")).listChats());
+api.get("/api/chats/:id", async ({ params }) => (await (await import("./modules/chats.js")).getChat(params.id)) ?? (() => { throw new HttpError(404, "No such chat"); })());
+api.delete("/api/chats/:id", async ({ params }) => (await import("./modules/chats.js")).deleteChat(params.id));
+api.post("/api/chats/send", async ({ body }) => {
+  const b = obj(body);
+  return (await import("./modules/chats.js")).sendChat(str(b.id, "id", { optional: true, max: 32 }) || null, str(b.text, "text", { max: 8000 }), { model: str(b.model, "model", { optional: true, max: 128 }) || undefined, provider: str(b.provider, "provider", { optional: true, max: 32 }), persona: str(b.persona, "persona", { optional: true, max: 32 }) || undefined });
+});
 api.get("/api/automations", async () => ({ items: await listAutomations(), templates: TEMPLATES }));
 api.post("/api/automations", ({ body }) => saveAutomation(obj(body) as Partial<Automation>));
 api.post("/api/automations/:id/run", async ({ params }) => ({ jobId: await runAutomation(params.id) }));

@@ -1,10 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useApi } from "../api/client";
-import { Sparkles, ArrowUp, Paperclip, ChevronUp, Mic } from "lucide-react";
-import { api } from "../api/client";
+import { Sparkles, ArrowUp, Paperclip, ChevronUp, Mic, MessagesSquare } from "lucide-react";
 import { useToast } from "../state/toast";
 import { AgentsPopover } from "./AgentsPopover";
-import type { AgentsInfo, Job } from "../api/types";
+import { startChat } from "./ChatView";
+import { navigate } from "../lib/router";
+import type { AgentsInfo } from "../api/types";
 
 /** Minimal typing for the browser speech API, which is not in lib.dom for all targets. */
 interface SpeechRec extends EventTarget {
@@ -46,10 +47,10 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
     if (!prompt || busy) return;
     setBusy(true);
     try {
-      const provider = localStorage.getItem("node.provider") || undefined;
-      const job = await api.post<Job>("/api/agents/ask", { prompt, persona, provider, model: model || undefined });
+      if (model) localStorage.setItem("node.model", model);
+      const id = await startChat(prompt, persona);
       setText("");
-      onJob(job.id);
+      navigate("chat", id);
     } catch (err) {
       toast(err instanceof Error ? err.message : "Could not reach NODE", "error");
     } finally {
@@ -87,6 +88,7 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
           <button ref={btn} type="button" className="persona" aria-expanded={open} aria-label="Agents" onClick={() => setOpen((o) => !o)}>
             <Sparkles size={16} /> <span>{current?.name ?? "Agents"}</span> <ChevronUp size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform var(--fast)" }} />
           </button>
+          <button type="button" className="icon-btn" aria-label="Chats" onClick={() => navigate("chat", "new", { history: "1" })}><MessagesSquare size={18} /></button>
           <button type="button" className={`mic${listening ? " on" : ""}`} aria-label="Speak" onClick={mic}><Mic size={18} /></button>
           <button type="button" className="icon-btn" aria-label="Attach" onClick={() => toast("Mention a path like ~/Documents/report.pdf", "info")}>
             <Paperclip size={18} />

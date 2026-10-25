@@ -71,9 +71,20 @@ export async function available(): Promise<boolean> {
  * Returns false when nothing is listening, so the caller can say so plainly
  * rather than hanging.
  */
-export async function converse(
+export type ChatMsg = { role: "system" | "user" | "assistant"; content: string };
+
+export function converse(
   system: string,
   user: string,
+  onLine: (line: string) => void,
+  signal?: AbortSignal,
+  model?: string,
+): Promise<boolean> {
+  return converseMessages([{ role: "system", content: system }, { role: "user", content: user }], onLine, signal, model);
+}
+
+export async function converseMessages(
+  messages: ChatMsg[],
   onLine: (line: string) => void,
   signal?: AbortSignal,
   model?: string,
@@ -86,10 +97,7 @@ export async function converse(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         model: model || MODEL,
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
+        messages,
         temperature: 0.3,
         stream: true,
       }),

@@ -9,6 +9,7 @@ import { TopBar } from "./components/TopBar";
 import { DemoBanner } from "./components/DemoBanner";
 import { TabBar } from "./components/TabBar";
 import { AskBar } from "./components/AskBar";
+import { ChatView } from "./components/ChatView";
 import { SearchOverlay } from "./components/SearchOverlay";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { JobPanel } from "./components/JobPanel";
@@ -123,6 +124,7 @@ function Shell() {
       </main>
       {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} />}
       <TabBar active={screen} />
+      {screen === "chat" && <ChatView id={route.sub ?? "new"} showHistory={route.params.get("history") === "1"} />}
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {notifs && <NotificationsPanel onClose={() => setNotifs(false)} />}
       {job && <JobPanel jobId={job} onClose={() => setJob(null)} />}

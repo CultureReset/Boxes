@@ -133,7 +133,7 @@ export async function personasForWorld(): Promise<Array<Persona & { id: string }
     .map(([id, p]) => ({ id, ...p }));
 }
 
-export async function ask(prompt: string, persona = "auto", providerId?: string, cwd?: string, model?: string): Promise<Job> {
+export async function ask(prompt: string, persona = "auto", providerId?: string, cwd?: string, model?: string, history: llm.ChatMsg[] = []): Promise<Job> {
   const world = await activeWorld();
   if (world.agents && persona !== "auto" && !world.agents.includes(persona)) persona = "general";
   if (persona === "auto" || !PERSONAS[persona]) persona = route(prompt, world.agents);
@@ -172,14 +172,15 @@ export async function ask(prompt: string, persona = "auto", providerId?: string,
       return;
     }
     if (provider.id === LOCAL_PROVIDER) {
-      const spoke = await llm.converse(personaDef.system, prompt, (line) => appendLine(job, line), undefined, model);
+      const spoke = await llm.converseMessages([{ role: "system", content: personaDef.system }, ...history.slice(-20), { role: "user", content: prompt }], (line) => appendLine(job, line), undefined, model);
       if (!spoke) appendLine(job, "The local model stopped answering. Check that it is running.");
       finishJob(job, spoke);
       return;
     }
 
     const def = PROVIDERS.find((p) => p.id === provider.id)!;
-    const fullPrompt = `${personaDef.system}\n\nUser: ${prompt}`;
+    const transcript = history.slice(-20).map((m) => `${m.role === "user" ? "User" : "Assistant"}: ${m.content}`).join("\n\n");
+    const fullPrompt = `${personaDef.system}\n\n${transcript ? transcript + "\n\n" : ""}User: ${prompt}`;
     const work = path.join(HOME, "Work");
     const workdir = cwd ?? (await stat(work).then((s) => s.isDirectory()).catch(() => false) ? work : HOME);
     const code = await stream(def.bin, def.args(fullPrompt), (line, ch) => appendLine(job, ch === "stderr" && !line.trim() ? "" : line), { cwd: workdir, env: { TERM: "dumb", NO_COLOR: "1" } });
