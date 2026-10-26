@@ -1,3 +1,4 @@
+import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
 import { startFrameProxies } from "./frameproxy.js";
 import http from "node:http";
@@ -372,6 +373,8 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
 }
 
 const server = http.createServer(async (req, res) => {
+  // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.
+  if (req.url?.startsWith("/api/bridge/")) return handleBridge(req, res);
   // Only ever talk to the local shell. A browser tab on another origin cannot
   // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
   const origin = req.headers.origin;

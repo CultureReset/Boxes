@@ -69,3 +69,31 @@ export function askPaperclip(prompt: string, source = "NODE app", meta: Record<s
   })();
   return job;
 }
+
+export interface AskResult { ok: boolean; issue: string; issueId: string; status: string; seconds: number; answer: string }
+
+/** paperclipAsk, waiting for the answer (same logic as paperclip-mcp-slim). */
+export async function askPaperclipWait(prompt: string, source: string, title?: string): Promise<AskResult> {
+  const t = (title?.trim() || prompt.split("\n")[0] || "Request").slice(0, 90);
+  const iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, {
+    title: t,
+    description: `${prompt}\n\n---\nFrom Matt via ${source}. Answer or do this, then post the final answer for Matt as a short plain-language comment on this issue and set the issue to done. Delegate if needed.`,
+    status: "todo",
+    assigneeAgentId: LEAD,
+  });
+  const ident = iss.identifier ?? iss.id;
+  const t0 = Date.now();
+  let last: string | null = null;
+  while (Date.now() - t0 < TIMEOUT_MS) {
+    await new Promise((r) => setTimeout(r, 5000));
+    try {
+      const st = (await pc<Issue>("GET", `/issues/${iss.id}`)).status ?? "";
+      const cs = (await pc<Comment[]>("GET", `/issues/${iss.id}/comments`))
+        .filter((c) => c.authorType === "agent" && !String(c.body ?? "").startsWith("Warning:"))
+        .sort((a, b) => String(a.createdAt).localeCompare(String(b.createdAt)));
+      if (cs.length) last = cs[cs.length - 1].body ?? null;
+      if (FINAL.has(st)) return { ok: st === "done" || st === "in_review", issue: ident, issueId: iss.id, status: st, seconds: Math.round((Date.now() - t0) / 1000), answer: last ?? "(no answer comment)" };
+    } catch { /* keep polling */ }
+  }
+  return { ok: false, issue: ident, issueId: iss.id, status: "still_working", seconds: Math.round((Date.now() - t0) / 1000), answer: (last ?? "no answer yet") + " — the answer will appear on that issue in Paperclip." };
+}
