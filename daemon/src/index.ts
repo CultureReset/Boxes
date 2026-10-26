@@ -382,6 +382,17 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
 // Local callers (healthcheck, the door's machine proxy) on this computer's own
 // addresses without X-Forwarded-For are trusted as before.
 const DOOR = process.env.NODEOS_DOOR ?? "http://127.0.0.1:7700";
+// The door's public HTTPS address. Browsers on a raw tailnet IP over plain http are sent there:
+// the door's session cookie is "Secure; SameSite=None", which Safari drops on http, so sign-in "worked" then bounced.
+const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
+function plainHttp(req: http.IncomingMessage): boolean {
+  const xfp = String(req.headers["x-forwarded-proto"] ?? "");
+  return !xfp.includes("https") && !(req.socket as unknown as { encrypted?: boolean }).encrypted;
+}
+function rawIpHost(req: http.IncomingMessage): boolean {
+  const h = (req.headers.host ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(":")) && h !== "127.0.0.1" && h !== "::1";
+}
 function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
   const u = new URL(DOOR);
   const sub = (req.url ?? "/").replace(/^\/door/, "") || "/";
@@ -393,6 +404,8 @@ function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
   const up = http.request({ hostname: u.hostname, port: u.port, method: req.method, path: sub, headers }, (r) => {
     const out: http.OutgoingHttpHeaders = { "Cache-Control": "no-store" };
     for (const k of ["content-type", "content-length", "set-cookie", "mcp-session-id"]) if (r.headers[k]) out[k] = r.headers[k];
+    // Plain http (e.g. an old http://<tailnet-ip>:7770 bookmark): a Secure cookie would be dropped, so issue it as Lax, non-Secure here.
+    if (plainHttp(req) && out["set-cookie"]) out["set-cookie"] = ([] as string[]).concat(out["set-cookie"] as string[]).map((c) => c.replace(/;\s*Secure/gi, "").replace(/SameSite=None/gi, "SameSite=Lax"));
     res.writeHead(r.statusCode ?? 502, out);
     r.pipe(res);
   });
@@ -401,6 +414,10 @@ function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
 }
 
 const server = http.createServer(async (req, res) => {
+  // Raw-IP plain-http page loads go to the one public door (same path), where sign-in sticks.
+  if (rawIpHost(req) && plainHttp(req) && (req.method === "GET" || req.method === "HEAD") && String(req.headers.accept ?? "").includes("text/html")) {
+    res.writeHead(301, { Location: DOOR_PUBLIC + (req.url ?? "/"), "Cache-Control": "no-store" }); res.end(); return;
+  }
   // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.
   if (req.url?.startsWith("/api/bridge/")) return handleBridge(req, res);
   // One login: remote devices (tailnet / Funnel) need a node-door session.
