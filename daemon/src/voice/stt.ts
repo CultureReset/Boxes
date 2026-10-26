@@ -30,13 +30,13 @@ export async function model(): Promise<Model> {
   return found;
 }
 
-/** llama-swap (:8080) serves Qwen3-ASR as model "asr" on /v1/audio/transcriptions. */
-const SWAP = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:8080/v1";
+/** LiteLLM (:4000) must expose Qwen3-ASR as model "asr" on /v1/audio/transcriptions. */
+import { GATEWAY as SWAP, gatewayHeaders } from "../gateway.js";
 const SWAP_ASR = process.env.NODEOS_STT_SWAP_MODEL ?? "asr";
 
 async function swapHasAsr(): Promise<boolean> {
   try {
-    const r = await fetch(`${SWAP}/models`, { signal: AbortSignal.timeout(3000) });
+    const r = await fetch(`${SWAP}/models`, { signal: AbortSignal.timeout(3000), headers: await gatewayHeaders(false) });
     if (!r.ok) return false;
     const j = (await r.json()) as { data?: { id: string }[] };
     return (j.data ?? []).some((m) => m.id === SWAP_ASR);
@@ -49,7 +49,7 @@ async function swapTranscribe(wav: Buffer): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "in.wav");
   form.append("model", SWAP_ASR);
-  const r = await fetch(`${SWAP}/audio/transcriptions`, { method: "POST", body: form, signal: AbortSignal.timeout(120_000) });
+  const r = await fetch(`${SWAP}/audio/transcriptions`, { method: "POST", body: form, headers: await gatewayHeaders(false), signal: AbortSignal.timeout(120_000) });
   if (!r.ok) return "";
   const j = (await r.json()) as { text?: string };
   // Qwen3-ASR prefixes its output with "language English<asr_text>".

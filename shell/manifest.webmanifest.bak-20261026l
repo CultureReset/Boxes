@@ -1,0 +1,1 @@
+{ "name": "NODE", "short_name": "NODE", "start_url": "/", "display": "standalone", "background_color": "#0a0d13", "theme_color": "#0a0d13", "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }] }

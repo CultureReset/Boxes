@@ -1,3 +1,4 @@
+import { AppView } from "./components/AppView";
 import { useEffect, useState } from "react";
 import { LogOut, Lock, Moon, Power, RefreshCw, Settings as SettingsIcon, Users } from "lucide-react";
 import { useRoute, navigate } from "./lib/router";
@@ -24,6 +25,13 @@ import { initSpatialNavigation, focusFirst } from "./lib/spatial";
 function Shell() {
   const route = useRoute();
   const online = useConnected();
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    if (online) { setOffline(false); return; }
+    // Give the first connection a moment before calling the desktop offline.
+    const t = setTimeout(() => setOffline(true), 4000);
+    return () => clearTimeout(t);
+  }, [online]);
   const { layout } = useLayout();
   const { worlds, active: world, switchTo } = useWorld();
   const toast = useToast();
@@ -130,16 +138,22 @@ function Shell() {
     <div className="frame">
       <TopBar active={screen} onSearch={() => setSearch(true)} onNotifications={() => setNotifs(true)} unread={unread} onUser={userMenu} />
       <DemoBanner />
+      {offline && (
+        <div role="alert" className="desktop-offline" style={{ background: "#5a1d1d", color: "#ffd9d9", padding: "8px 14px", textAlign: "center", fontSize: 14 }}>
+          Desktop offline — can't reach NODE on your desktop over Tailscale. Showing the saved app; nothing will run until it's back.
+        </div>
+      )}
       <main className={`main${showAsk ? "" : " no-ask"}`} key={`${screen}:${world?.id ?? ""}`}>
         <div className="fade-in">
           <Screen sub={route.sub} params={route.params} onJob={setJob} />
         </div>
       </main>
       {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
-      {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} />}
+      {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} onJob={setJob} />}
       <TabBar active={screen} />
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {notifs && <NotificationsPanel onClose={() => setNotifs(false)} />}
+      <AppView />
       {job && <JobPanel jobId={job} onClose={() => setJob(null)} />}
       {power && (
         <Sheet title="Power" icon={<Power size={18} />} onClose={() => setPower(false)} size="narrow">

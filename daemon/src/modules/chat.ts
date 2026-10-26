@@ -10,13 +10,12 @@ import { transcribe } from "../voice/stt.js";
 /**
  * Chat with a chosen model.
  *
- * Local models go to llama-swap (:8080). Cloud routes (deepseek*, grok*) go
+ * All models (local and cloud) go
  * to LiteLLM (:4000), whose key is read from its env file at call time and
  * never logged or returned. Uploads live on the 2 TB HDD, not the SSD.
  */
 
-const SWAP = (process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:8080/v1").replace(/\/$/, "");
-const LITELLM = (process.env.NODEOS_LITELLM_URL ?? "http://127.0.0.1:4000/v1").replace(/\/$/, "");
+import { GATEWAY as LITELLM, gatewayKey } from "../gateway.js";
 const LITELLM_ENV = process.env.NODEOS_LITELLM_ENV ?? path.join(HOME, ".config/litellm/litellm.env");
 export const UPLOAD_DIR = process.env.NODEOS_UPLOAD_DIR ?? "/hdd/home/steve/nodeos/uploads";
 const VISION_MODEL = process.env.NODEOS_VISION_MODEL ?? "v4";
@@ -25,7 +24,7 @@ const VISION = new Set([VISION_MODEL]);
 const NOT_CHAT = /^(asr|asr-proj|.*-proj|nomic-embed.*|.*embed.*)$/;
 const CLOUD = /^(deepseek|grok)/;
 
-export interface ChatModel { id: string; via: "llama-swap" | "litellm"; label: string; vision: boolean }
+export interface ChatModel { id: string; via: "litellm"; cloud: boolean; label: string; vision: boolean }
 export interface Attachment { id: string; name: string; type: string; size: number; kind: "image" | "pdf" | "text" | "other"; chars: number }
 export interface ChatMessage { role: "user" | "assistant"; content: string; at: string; model?: string; attachments?: Attachment[]; error?: boolean }
 export interface Chat { id: string; title: string; model: string; createdAt: string; updatedAt: string; messages: ChatMessage[] }
@@ -33,14 +32,7 @@ export interface Chat { id: string; title: string; model: string; createdAt: str
 const chats = new JsonStore<Chat[]>("chats", () => []);
 const uploads = new JsonStore<Record<string, Attachment & { file: string; textFile?: string }>>("uploads", () => ({}));
 
-async function litellmKey(): Promise<string> {
-  try {
-    const m = (await readFile(LITELLM_ENV, "utf8")).match(/^LITELLM_MASTER_KEY=["']?([^"'\n]+)/m);
-    return m?.[1] ?? "";
-  } catch {
-    return "";
-  }
-}
+const litellmKey = gatewayKey;
 
 async function listIds(base: string, key?: string): Promise<string[]> {
   try {
@@ -53,10 +45,14 @@ async function listIds(base: string, key?: string): Promise<string[]> {
 }
 
 export async function models(): Promise<ChatModel[]> {
-  const [local, cloud] = await Promise.all([listIds(SWAP), litellmKey().then((k) => listIds(LITELLM, k))]);
-  const out: ChatModel[] = local.filter((m) => !NOT_CHAT.test(m)).map((m) => ({ id: m, via: "llama-swap", label: m, vision: VISION.has(m) }));
-  for (const m of cloud.filter((m) => CLOUD.test(m)).sort()) out.push({ id: m, via: "litellm", label: `${m} (cloud)`, vision: /^grok/.test(m) });
-  return out;
+  // Everything comes from LiteLLM, the only gateway. Local first, then cloud.
+  const ids = (await listIds(LITELLM, await litellmKey())).filter((m) => !NOT_CHAT.test(m));
+  const local = ids.filter((m) => !CLOUD.test(m)).sort();
+  const cloud = ids.filter((m) => CLOUD.test(m)).sort();
+  return [
+    ...local.map((m): ChatModel => ({ id: m, via: "litellm", cloud: false, label: m, vision: VISION.has(m) })),
+    ...cloud.map((m): ChatModel => ({ id: m, via: "litellm", cloud: true, label: `${m} (cloud)`, vision: /^grok/.test(m) })),
+  ];
 }
 
 /* ---------- uploads ---------- */
@@ -201,8 +197,8 @@ export async function send(cid: string | null, text: string, model: string, atta
     if (m.error) continue;
     msgs.push(m.role === "user" ? { role: "user", content: await userContent(m, used.vision && m === userMsg) } : { role: "assistant", content: m.content });
   }
-  const base = used.via === "litellm" ? LITELLM : SWAP;
-  const key = used.via === "litellm" ? await litellmKey() : "";
+  const base = LITELLM;
+  const key = await litellmKey();
   let reply: ChatMessage;
   try {
     const r = await fetch(`${base}/chat/completions`, {

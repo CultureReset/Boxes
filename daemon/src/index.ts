@@ -1,5 +1,8 @@
+import { streamWindow } from "./winstream.js";
+import { startFrameProxies } from "./frameproxy.js";
 import http from "node:http";
 import path from "node:path";
+import { askPaperclip } from "./modules/paperclip.js";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
@@ -296,6 +299,13 @@ api.post("/api/backgrounds/set", ({ body }) => setBackground(str(obj(body).file,
 
 // ---- Agents & automations ------------------------------------------------
 api.get("/api/agents", async () => ({ providers: await listProviders(), personas: (await personasForWorld()).map(({ system, ...p }) => p) }));
+api.post("/api/chats/:id/paperclip", async ({ params, body }) => {
+  const c = await getChat(params.id);
+  const note = str(obj(body).text, "text", { optional: true, max: 8000 }) ?? "";
+  const convo = (c?.messages ?? []).filter((m) => !m.error).slice(-12).map((m) => `${m.role === "user" ? "Matt" : "Assistant"}: ${m.content}`).join("\n\n");
+  const prompt = (note ? note + "\n\n" : "") + "Task from this NODE chat:\n\n" + convo;
+  return askPaperclip(prompt.slice(0, 20_000), "a NODE chat", { chat: params.id });
+});
 api.post("/api/agents/ask", ({ body }) => {
   const b = obj(body);
   return ask(str(b.prompt, "prompt", { max: 8000 }), str(b.persona, "persona", { optional: true, max: 32 }) || "general", str(b.provider, "provider", { optional: true, max: 32 }) || undefined);
@@ -383,6 +393,7 @@ const server = http.createServer(async (req, res) => {
   // have run for requests that arrived WITH an Origin header — which the shell
   // does not send. Every API call from the shell would have fallen through to
   // serveStatic and come back as HTML.
+  if (req.url?.startsWith("/api/windows/stream")) return streamWindow(req, res);
   if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });
     return;
@@ -410,6 +421,8 @@ server.on("error", (e: NodeJS.ErrnoException) => {
   }
   throw e;
 });
+
+startFrameProxies();
 
 server.listen(PORT, HOST, async () => {
   const s = await status();

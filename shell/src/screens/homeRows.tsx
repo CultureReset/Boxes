@@ -1,3 +1,4 @@
+import { openApp, openWindowView, showAppView } from "../lib/openApp";
 import { useMemo } from "react";
 import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -26,7 +27,12 @@ function useApps() {
 
 function useLaunch() {
   const toast = useToast();
-  return (id: string) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  const { byId } = useApps();
+  return (id: string) => {
+    const a = byId.get(id);
+    if (a) return void openApp(a, toast);
+    void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  };
 }
 
 function todayRange() {
@@ -78,7 +84,7 @@ export function ContinueRow(_: RowProps) {
       {windows === null && [1, 2, 3].map((i) => <Skeleton key={i} h={92} w={300} />)}
       {(windows ?? []).map((w) => {
         const a = w.appId ? byId.get(w.appId) : undefined;
-        return <ItemCard key={w.address} icon={<AppIcon icon={a?.icon ?? w.class} name={a?.name ?? w.class} color={a?.color} />} title={a?.name ?? w.class} subtitle={w.title} meta={<>{w.focused ? <Dot state="on" /> : <Dot state="off" />} {w.focused ? "Active" : `Workspace ${w.workspace}`}</>} onClick={() => void api.post("/api/windows/focus", { address: w.address })} onMore={(e) => menu.open(e, [{ label: "Switch to", onClick: () => void api.post("/api/windows/focus", { address: w.address }) }, { label: "Close", danger: true, onClick: () => void api.post("/api/windows/close", { address: w.address }) }])} />;
+        return <ItemCard key={w.address} icon={<AppIcon icon={a?.icon ?? w.class} name={a?.name ?? w.class} color={a?.color} />} title={a?.name ?? w.class} subtitle={w.title} meta={<>{w.focused ? <Dot state="on" /> : <Dot state="off" />} {w.focused ? "Active" : `Workspace ${w.workspace}`}</>} onClick={() => void openWindowView(w)} onMore={(e) => menu.open(e, [{ label: "Switch to", onClick: () => void api.post("/api/windows/focus", { address: w.address }) }, { label: "Close", danger: true, onClick: () => void api.post("/api/windows/close", { address: w.address }) }])} />;
       })}
       {(recent ?? []).slice(0, 4).map((f) => <ItemCard key={f.path} icon={<FileGlyph kind={f.kind} />} title={f.name} subtitle={`Edited ${timeAgo(f.modified)}`} meta="Files" onClick={() => void api.post("/api/open", { target: f.path })} />)}
       {windows && windows.length === 0 && (recent ?? []).length === 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#636e7b" }}><AppWindow size={26} /></span>} title="Nothing open yet" subtitle="Open an app and it will show up here" onClick={() => navigate("apps")} />}
@@ -199,7 +205,7 @@ export function ServicesRow(_: RowProps) {
   };
   const controlMenu = (e: React.MouseEvent, c: ControlStatus) =>
     menu.open(e, [
-      ...(c.url ? [{ label: "Open", onClick: () => window.open(c.url!, "_blank", "noopener") }] : []),
+      ...(c.url ? [{ label: "Open", onClick: () => showAppView({ kind: "web", url: c.url!, title: c.name }) }] : []),
       ...(c.self ? [] : [{ label: "Start", icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
       { label: "Restart", onClick: () => void act(c, "restart") },
       ...(c.self ? [] : [{ label: "Stop", danger: true, onClick: () => void act(c, "stop") }]),
@@ -207,7 +213,7 @@ export function ServicesRow(_: RowProps) {
   const linked = data.ports.filter((p) => p.url);
   const running = data.services.filter((s) => s.running);
   const down = data.services.filter((s) => !s.running && s.kind === "docker");
-  const open = (url: string) => window.open(url, "_blank", "noopener");
+  const open = (url: string) => showAppView({ kind: "web", url, title: new URL(url, location.href).host });
   const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
   return (
     <Section title="Running on This Computer">

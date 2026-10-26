@@ -13,6 +13,8 @@ export interface AppEntry {
   color?: string;
   desktopFile?: string;
   url?: string;
+  /** Same app, through the frame proxy, for NODE's in-app view. */
+  frameUrl?: string;
   package?: string;
 }
 

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Plus, History, FileText, Trash2 } from "lucide-react";
+import { X, Plus, History, FileText, Trash2, Send } from "lucide-react";
+import type { Job } from "../api/types";
 import { api } from "../api/client";
 import type { Chat, ChatMessage, ChatSummary } from "../api/types";
 import { sendChat, store, type Outgoing } from "../lib/chat";
@@ -9,7 +10,8 @@ import { useToast } from "../state/toast";
  * A conversation with one model. Sits under the ask bar so the same full-width
  * bar keeps the conversation going. History lives on the box (chats.json).
  */
-export function ChatPanel({ chatId, outgoing, onChatId, onModel, onClose }: {
+export function ChatPanel({ chatId, outgoing, onChatId, onModel, onClose, onJob }: {
+  onJob?: (id: string) => void;
   chatId: string | null;
   outgoing: (Outgoing & { n: number }) | null;
   onChatId: (id: string | null) => void;
@@ -58,6 +60,12 @@ export function ChatPanel({ chatId, outgoing, onChatId, onModel, onClose }: {
       <header className="chat-head">
         <button type="button" className="icon-btn" aria-label="Chat history" onClick={() => { setShowList((s) => !s); loadList(); }}><History size={18} /></button>
         <div className="grow t">{showList ? "Chats" : (chat?.title ?? (pending.length ? pending[0].content.slice(0, 40) || "New chat" : "New chat"))}</div>
+        {chat?.id && !showList && onJob && (
+          <button type="button" className="icon-btn" aria-label="Send to Paperclip" title="Send this chat to Paperclip as a task for Lead"
+            onClick={() => void api.post<Job>(`/api/chats/${chat.id}/paperclip`, {}).then((j) => { onJob(j.id); toast("Sent to Paperclip (Lead)"); }).catch((e) => toast(e instanceof Error ? e.message : "Paperclip failed", "error"))}>
+            <Send size={18} />
+          </button>
+        )}
         <button type="button" className="icon-btn" aria-label="New chat" onClick={() => { setChat(null); onChatId(null); setShowList(false); }}><Plus size={18} /></button>
         <button type="button" className="icon-btn" aria-label="Close chat" onClick={onClose}><X size={18} /></button>
       </header>

@@ -1,3 +1,4 @@
+import { frames } from "../../frameproxy.js";
 import { existsSync } from "node:fs";
 import { has, launchDetached } from "../../exec.js";
 import { WorldStore } from "../worlds.js";
@@ -35,7 +36,7 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url) };
 }
 
 /**
@@ -116,3 +117,10 @@ export const webProvider: AppProvider = {
     return m?.[1];
   },
 };
+
+function frameUrlFor(slug: string, url: string): string | undefined {
+  const f = frames().find((x) => x.slug === slug);
+  if (!f) return undefined;
+  const u = new URL(url);
+  return `https://${u.hostname}:${f.servePort}${f.path}`;
+}

@@ -144,8 +144,8 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
     if (fileInput.current) fileInput.current.value = "";
   };
 
-  const local = (models ?? []).filter((m) => m.via === "llama-swap");
-  const cloud = (models ?? []).filter((m) => m.via === "litellm");
+  const local = (models ?? []).filter((m) => !m.cloud);
+  const cloud = (models ?? []).filter((m) => m.cloud);
 
   return (
     <div className="askbar-wrap">
@@ -196,9 +196,9 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
       {pickModel && (
         <div className="popover model-pop" role="listbox" aria-label="Choose a model" onMouseDown={(e) => e.stopPropagation()}>
           <button type="button" role="option" aria-selected={!chatMode} className={!chatMode ? "active" : ""} onClick={() => { onModel(AGENT); setPickModel(false); }}>
-            <Sparkles size={14} /> <span className="grow">Agent</span> <small>Claude Code, Codex… with a persona</small>
+            <Sparkles size={14} /> <span className="grow">Agent</span> <small>Sends it to Paperclip (Lead)</small>
           </button>
-          <div className="grp">Local · llama-swap</div>
+          <div className="grp">Local · via LiteLLM</div>
           {local.map((m) => (
             <button key={m.id} type="button" role="option" aria-selected={model === m.id} className={model === m.id ? "active" : ""} onClick={() => { onModel(m.id); setPickModel(false); }}>
               <Cpu size={14} /> <span className="grow">{m.id}</span> {m.vision && <small>vision</small>}

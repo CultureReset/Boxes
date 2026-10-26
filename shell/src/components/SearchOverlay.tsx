@@ -1,3 +1,4 @@
+import { openApp } from "../lib/openApp";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { Search, Folder, LayoutGrid, Settings, ArrowRight, FileText } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -39,7 +40,7 @@ export function SearchOverlay({ onClose }: { onClose: () => void }) {
     const out: Hit[] = [];
     if (needle) {
       for (const a of (apps ?? []).filter((a) => a.name.toLowerCase().includes(needle) || a.comment.toLowerCase().includes(needle)).slice(0, 6)) {
-        out.push({ kind: "app", title: a.name, subtitle: a.comment || "App", icon: <AppIcon icon={a.icon} name={a.name} color={a.color} size="sm" />, run: () => void api.post<{ message: string }>("/api/apps/launch", { id: a.id }).then((r) => toast(r.message)) });
+        out.push({ kind: "app", title: a.name, subtitle: a.comment || "App", icon: <AppIcon icon={a.icon} name={a.name} color={a.color} size="sm" />, run: () => void openApp(a, toast) });
       }
       for (const s of SETTINGS_INDEX.filter((s) => s.title.toLowerCase().includes(needle) || s.keywords.some((k) => k.includes(needle))).slice(0, 4)) {
         out.push({ kind: "setting", title: s.title, subtitle: "Settings", icon: <span className="app-icon sm" style={{ ["--ic" as string]: "#636e7b" }}><Settings size={18} /></span>, run: () => navigate("settings", s.id) });

@@ -1,3 +1,5 @@
+import { openApp, showAppView } from "../../lib/openApp";
+import type { AppEntry } from "../../api/types";
 import { api } from "../../api/client";
 import type { Shortcut } from "../../api/types";
 import { useWorld } from "../../state/world";
@@ -20,9 +22,9 @@ export function useShortcuts() {
     if (type === "screen") {
       const [screen, sub] = target.split("/");
       navigate(screen, sub);
-    } else if (type === "app") void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: target }).then((r) => toast(r.message, r.ok ? "ok" : "error"));
+    } else if (type === "app") void api.get<AppEntry[]>("/api/apps").then((l) => { const a = l.find((x) => x.id === target); if (a) return openApp(a, toast); return api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: target }).then((r) => toast(r.message, r.ok ? "ok" : "error")); });
+    else if (type === "url") showAppView({ kind: "web", url: target, title: new URL(target).host });
     else if (type === "agent") askWith(target);
-    else if (type === "url") void api.post("/api/apps/webapp", { url: target });
     else if (type === "world") void switchTo(target).then((r) => (r === "pin" ? navigate("settings", "worlds") : r === "wrong" ? toast("Locked", "error") : navigate("home")));
   };
   return { run, shortcuts: active?.shortcuts ?? [] };

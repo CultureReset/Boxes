@@ -13,6 +13,7 @@ export interface AppEntry {
   color?: string;
   desktopFile?: string;
   url?: string;
+  frameUrl?: string;
   package?: string;
 }
 
@@ -332,7 +333,7 @@ export interface ControlStatus {
 }
 
 /* ---------- Chat with a chosen model ---------- */
-export interface ChatModel { id: string; via: "llama-swap" | "litellm"; label: string; vision: boolean }
+export interface ChatModel { id: string; via: "litellm"; cloud: boolean; label: string; vision: boolean }
 export interface Attachment { id: string; name: string; type: string; size: number; kind: "image" | "pdf" | "text" | "other"; chars: number }
 export interface ChatMessage { role: "user" | "assistant"; content: string; at: string; model?: string; attachments?: Attachment[]; error?: boolean; pending?: boolean }
 export interface Chat { id: string; title: string; model: string; createdAt: string; updatedAt: string; messages: ChatMessage[] }
