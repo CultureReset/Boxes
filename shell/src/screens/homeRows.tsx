@@ -1,7 +1,7 @@
 import { useMemo } from "react";
 import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
-import type { AndroidStatus, AppEntry, Automation, CalendarEvent, FileEntry, Notification, ServicesReport, WindowEntry } from "../api/types";
+import type { AndroidStatus, AppEntry, Automation, CalendarEvent, ControlStatus, FileEntry, Notification, ServicesReport, WindowEntry } from "../api/types";
 import { useStatus } from "../state/status";
 import { useToast } from "../state/toast";
 import { Section } from "../components/Section";
@@ -181,8 +181,29 @@ export function AutomationsRow({ onJob }: RowProps) {
 }
 
 export function ServicesRow(_: RowProps) {
-  const { data } = useApi<ServicesReport>("/api/services");
+  const { data, reload } = useApi<ServicesReport>("/api/services");
+  const control = useApi<ControlStatus[]>("/api/control");
+  const menu = useMenu();
+  const toast = useToast();
   if (!data) return null;
+  const act = async (c: ControlStatus, action: "start" | "stop" | "restart") => {
+    toast(`${action === "start" ? "Starting" : action === "stop" ? "Stopping" : "Restarting"} ${c.name}…`, "info");
+    try {
+      const r = await api.post<{ ok: boolean; error?: string }>(`/api/control/${c.id}/${action}`);
+      toast(r.ok ? `${c.name}: ${action} done` : `${c.name}: ${r.error ?? "failed"}`, r.ok ? "ok" : "error");
+    } catch (e) {
+      toast(`${c.name}: ${e instanceof Error ? e.message : String(e)}`, "error");
+    }
+    void control.reload();
+    void reload();
+  };
+  const controlMenu = (e: React.MouseEvent, c: ControlStatus) =>
+    menu.open(e, [
+      ...(c.url ? [{ label: "Open", onClick: () => window.open(c.url!, "_blank", "noopener") }] : []),
+      ...(c.self ? [] : [{ label: "Start", icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
+      { label: "Restart", onClick: () => void act(c, "restart") },
+      ...(c.self ? [] : [{ label: "Stop", danger: true, onClick: () => void act(c, "stop") }]),
+    ]);
   const linked = data.ports.filter((p) => p.url);
   const running = data.services.filter((s) => s.running);
   const down = data.services.filter((s) => !s.running && s.kind === "docker");
@@ -202,6 +223,18 @@ export function ServicesRow(_: RowProps) {
       {data.health?.checks.filter((c) => !c.ok).map((c) => (
         <ItemCard key={`h${c.name}`} icon={icon("#ff453a")} title={c.name} subtitle={c.detail} meta={<><Dot state="alert" /> Failing</>} />
       ))}
+      {control.data?.map((c) => (
+        <ItemCard
+          key={`c${c.id}`}
+          icon={icon(c.status === "running" ? "#30d158" : c.status === "partial" ? "#ff9f0a" : c.tier === "core" ? "#ff453a" : "#8e8e93")}
+          title={c.name}
+          subtitle={c.why}
+          meta={<><Dot state={c.status === "running" ? "on" : c.status === "partial" ? "warn" : c.tier === "core" ? "alert" : "off"} /> {c.status === "running" ? "Running" : c.status === "partial" ? "Partly running" : "Stopped"} · {c.tier === "core" ? "Core" : "On demand"}</>}
+          onClick={(e) => controlMenu(e, c)}
+          onMore={(e) => controlMenu(e, c)}
+        />
+      ))}
+      {menu.element}
       {linked.map((p) => (
         <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} onClick={() => open(p.url!)} />
       ))}

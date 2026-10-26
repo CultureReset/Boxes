@@ -26,6 +26,7 @@ import { listProviders, personasForWorld, ask } from "./modules/agents.js";
 import { listWorlds, switchWorld, saveWorld, deleteWorld, type World } from "./modules/worlds.js";
 import { weather } from "./modules/weather.js";
 import { servicesReport, healthReport } from "./modules/services.js";
+import { controlList, controlOne, controlAction } from "./modules/control.js";
 import { check } from "./modules/features.js";
 import { TEMPLATES, listAutomations, saveAutomation, deleteAutomation, runAutomation, startScheduler } from "./modules/automations.js";
 import { listNotifications, markRead, clearAll, sendDesktop, watchDbus } from "./modules/notifications.js";
@@ -207,6 +208,9 @@ api.get("/api/icon/:name", async ({ params, res }) => {
 // ---- Windows (Hyprland) ------------------------------------------------
 api.get("/api/services", () => servicesReport());
 api.get("/api/health", () => healthReport());
+api.get("/api/control", () => controlList());
+api.get("/api/control/:id", ({ params }) => controlOne(params.id));
+api.post("/api/control/:id/:action", ({ params }) => controlAction(params.id, params.action));
 api.get("/api/windows", () => listWindows());
 api.post("/api/windows/focus", async ({ body }) => ({ ok: await focusWindow(str(obj(body).address, "address")) }));
 api.post("/api/windows/close", async ({ body }) => ({ ok: await closeWindow(str(obj(body).address, "address")) }));
@@ -354,6 +358,27 @@ const server = http.createServer(async (req, res) => {
     return;
   }
   await serveStatic(req, res);
+});
+
+// Also listen on loopback when NODEOS_HOST is another address (the Tailscale
+// IP), so `tailscale serve` and local tools can reach 127.0.0.1:7770 even
+// before tailscale0 has its address at boot.
+if (HOST !== "127.0.0.1" && HOST !== "0.0.0.0" && HOST !== "::") {
+  const loop = http.createServer((req, res) => server.emit("request", req, res));
+  loop.on("error", (e) => console.error(`NODE loopback listener: ${(e as Error).message}`));
+  loop.listen(PORT, "127.0.0.1", () => console.log(`NODE daemon also listening on http://127.0.0.1:${PORT}`));
+  for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => loop.close());
+}
+
+// The Tailscale address may not exist yet right after boot. Retry instead of
+// crashing; the loopback listener keeps serving meanwhile.
+server.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EADDRNOTAVAIL") {
+    console.error(`NODE: ${HOST} not available yet; retrying in 5s`);
+    setTimeout(() => server.listen(PORT, HOST), 5000).unref();
+    return;
+  }
+  throw e;
 });
 
 server.listen(PORT, HOST, async () => {

@@ -311,3 +311,22 @@ export interface ServicesReport {
   ports: PortEntry[];
   health?: HealthReport;
 }
+
+export interface ControlUnitState {
+  unit: string;
+  running: boolean;
+  state: string;
+}
+
+export interface ControlStatus {
+  id: string;
+  name: string;
+  tier: "core" | "on-demand";
+  kind: "systemd" | "docker";
+  units: string[];
+  url: string | null;
+  why: string;
+  self?: boolean;
+  status: "running" | "partial" | "stopped";
+  unitStates: ControlUnitState[];
+}
