@@ -2,7 +2,7 @@
   {
     "slug": "openjarvis",
     "name": "OpenJarvis",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:20443/",
     "comment": "AI assistant UI",
     "color": "#0a84ff",
     "category": "This Computer",
@@ -12,7 +12,7 @@
   {
     "slug": "twenty-crm",
     "name": "Twenty CRM",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:6443/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:26443/",
     "comment": "CRM",
     "color": "#5e5ce6",
     "category": "This Computer",
@@ -26,7 +26,7 @@
       "Hermes"
     ],
     "name": "Paperclip",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10443/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:30443/",
     "comment": "Agent company",
     "color": "#ff9f0a",
     "category": "This Computer",
@@ -36,7 +36,7 @@
   {
     "slug": "n8n",
     "name": "n8n",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:5443/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:25443/",
     "comment": "Workflow automation",
     "color": "#ff375f",
     "category": "This Computer",
@@ -46,7 +46,7 @@
   {
     "slug": "litellm",
     "name": "LiteLLM",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:3443/ui/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:23443/ui/",
     "comment": "LLM proxy admin",
     "color": "#30d158",
     "category": "This Computer",
@@ -56,7 +56,7 @@
   {
     "slug": "searxng",
     "name": "SearXNG",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:9443/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:29443/",
     "comment": "Private search",
     "color": "#64d2ff",
     "category": "This Computer",
@@ -66,7 +66,7 @@
     "slug": "openclaw",
     "parent": "paperclip",
     "name": "OpenClaw",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:11443/",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:31443/",
     "comment": "Agent gateway control UI",
     "color": "#ff453a",
     "category": "This Computer",
