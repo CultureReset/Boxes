@@ -1,4 +1,4 @@
-import { Calendar, AppWindow, Download, Sparkles } from "lucide-react";
+import { Calendar, AppWindow, Download, Sparkles, MessagesSquare } from "lucide-react";
 import { useApi } from "../../api/client";
 import type { Automation, CalendarEvent, Job, WindowEntry } from "../../api/types";
 import { useStatus } from "../../state/status";
@@ -35,6 +35,7 @@ export function DashboardHome({ onJob }: ScreenProps) {
         <StatTile icon={<AppWindow size={22} />} value={windows ? windows.length : "–"} label={`app${windows?.length === 1 ? "" : "s"} open`} onClick={() => navigate("apps")} />
         <StatTile icon={<Download size={22} />} value={status == null ? "…" : status.updates ?? "n/a"} label={status == null ? "updates available" : status.updates == null ? "updates: can\u2019t check" : status.updates === 1 ? "update available" : "updates available"} onClick={() => navigate("settings", "updates")} />
         <FeatureTile icon={<Sparkles size={22} />} title={runningJobs.length ? "Your AI agents are active" : "Your AI agents are ready"} subtitle={`${runningJobs.length ? `Working on ${runningJobs.length} · ` : ""}${running.length} automation${running.length === 1 ? "" : "s"} running`} onClick={() => navigate("agents")} />
+        <FeatureTile icon={<MessagesSquare size={22} />} title="Chats" subtitle="Your conversations with NODE" onClick={() => navigate("chat", "new", { history: "1" })} />
       </div>
       {(layout?.rows ?? []).filter((r) => r.enabled).map((r) => {
         const mod = homeRow(r.id);

@@ -1,3 +1,4 @@
+import { launchApp } from "../lib/launch";
 import { useEffect, useMemo, useState } from "react";
 import { Search, ChevronDown, Play, Trash2, Globe, Download, Check, LayoutGrid, Smartphone, Monitor, Plus, Usb } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -57,7 +58,7 @@ export function Apps({ onJob, params }: ScreenProps) {
     if (params.get("add") === "1") setWebSheet(true);
   }, [params]);
 
-  const launch = (a: AppEntry) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: a.id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  const launch = (a: AppEntry) => launchApp(a, a.id, toast);
   const install = (p: Package) => void api.post<Job>("/api/store/install", { name: p.name, appId: p.appId, source: p.source }).then((j) => onJob(j.id)).catch((e) => toast(e.message, "error"));
   const remove = (a: AppEntry) => void api.post<{ ok: boolean; message: string; jobId?: string }>("/api/apps/remove", { id: a.id }).then((r) => { r.jobId ? onJob(r.jobId) : toast(r.message, r.ok ? "ok" : "error"); reload(); }).catch((e) => toast(e.message, "error"));
 

@@ -1,3 +1,4 @@
+import { launchApp } from "../lib/launch";
 import { useMemo } from "react";
 import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -26,7 +27,8 @@ function useApps() {
 
 function useLaunch() {
   const toast = useToast();
-  return (id: string) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  const { byId } = useApps();
+  return (id: string) => launchApp(byId.get(id), id, toast);
 }
 
 function todayRange() {

@@ -181,6 +181,20 @@ api.post("/api/apps/refresh", async () => {
 api.post("/api/apps/launch", ({ body }) => launchApp(str(obj(body).id, "id", { max: 256 })));
 api.post("/api/apps/remove", ({ body }) => removeApp(str(obj(body).id, "id", { max: 256 })));
 api.get("/api/webapps/catalog", () => catalog());
+let webHealth: { at: number; data: Record<string, boolean> } | null = null;
+api.get("/api/webapps/health", async () => {
+  if (webHealth && Date.now() - webHealth.at < 30_000) return webHealth.data;
+  const apps = (await listApps(false)) as Array<{ id: string; url?: string }>;
+  const data: Record<string, boolean> = {};
+  await Promise.all(apps.filter((a) => a.url && /^https?:/.test(a.url)).map(async (a) => {
+    try {
+      const r = await fetch(a.url!, { redirect: "manual", signal: AbortSignal.timeout(4000) });
+      data[a.id] = r.status < 500;
+    } catch { data[a.id] = false; }
+  }));
+  webHealth = { at: Date.now(), data };
+  return data;
+});
 api.post("/api/webapps/add", ({ body }) => {
   const b = obj(body);
   return addWebApp({ slug: str(b.slug, "slug", { optional: true, max: 64 }) || undefined, name: str(b.name, "name", { optional: true, max: 64 }) || undefined, url: str(b.url, "url", { optional: true, max: 2048 }) || undefined, color: str(b.color, "color", { optional: true, max: 16 }) || undefined });

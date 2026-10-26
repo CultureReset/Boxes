@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { useApi } from "../api/client";
-import { Sparkles, ArrowUp, Paperclip, ChevronUp, Mic, MessagesSquare } from "lucide-react";
+import { Sparkles, ArrowUp, Paperclip, ChevronUp, Mic, History } from "lucide-react";
 import { useToast } from "../state/toast";
 import { AgentsPopover } from "./AgentsPopover";
 import { startChat } from "./ChatView";
@@ -88,7 +88,7 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
           <button ref={btn} type="button" className="persona" aria-expanded={open} aria-label="Agents" onClick={() => setOpen((o) => !o)}>
             <Sparkles size={16} /> <span>{current?.name ?? "Agents"}</span> <ChevronUp size={14} style={{ transform: open ? "rotate(180deg)" : undefined, transition: "transform var(--fast)" }} />
           </button>
-          <button type="button" className="icon-btn" aria-label="Chats" onClick={() => navigate("chat", "new", { history: "1" })}><MessagesSquare size={18} /></button>
+          <button type="button" className="icon-btn chats-btn" aria-label="Chats" title="Chat history" onClick={() => navigate("chat", "new", { history: "1" })}><History size={19} /></button>
           <button type="button" className={`mic${listening ? " on" : ""}`} aria-label="Speak" onClick={mic}><Mic size={18} /></button>
           <button type="button" className="icon-btn" aria-label="Attach" onClick={() => toast("Mention a path like ~/Documents/report.pdf", "info")}>
             <Paperclip size={18} />

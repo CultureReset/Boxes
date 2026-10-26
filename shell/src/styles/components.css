@@ -2124,3 +2124,12 @@ html {
 .cv-hhead { gap: 8px; padding-right: 10px; }
 .cv-hrow { padding-right: 4px; }
 .cv-hhead .btn { flex: none; }
+@media (max-width: 480px) {
+  .askbar-tools { gap: 2px; }
+  .askbar-tools .persona { flex: 0 1 auto; max-width: 92px; padding: 0 8px; gap: 3px; }
+  .askbar-tools .persona span { max-width: 48px; }
+  .askbar-tools .persona svg:last-child { display: none; }
+  .askbar-tools .model-pick { flex: 1 1 0; min-width: 52px; }
+  .askbar-tools .mic, .askbar-tools .icon-btn, .askbar-tools .send { width: 42px; height: 44px; }
+  .askbar-tools .chats-btn { color: var(--text); }
+}
