@@ -1,5 +1,5 @@
 import type http from "node:http";
-import { randomBytes, timingSafeEqual } from "node:crypto";
+import { randomBytes, timingSafeEqual, createHmac } from "node:crypto";
 import { readFileSync, writeFileSync, mkdirSync, existsSync, chmodSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -50,7 +50,48 @@ const TOOL = {
   inputSchema: { type: "object", properties: { request: { type: "string", description: "The full request in plain words" }, title: { type: "string", description: "Short title (optional)" } }, required: ["request"] },
 };
 
+/* ---------- Twenty CRM -> Paperclip ----------
+ * Twenty's webhook (signed with the NODE app token as its secret) posts here on
+ * task.created. A task whose title starts with "Ask Paperclip" is sent to Lead;
+ * Lead's answer is written back into the task and the task is marked done.
+ */
+const TWENTY = process.env.NODEOS_TWENTY_URL ?? "http://127.0.0.1:3000";
+const TWENTY_KEY_FILE = path.join(os.homedir(), ".config/nodeos/twenty-api-key");
+const seenNonces = new Set<string>();
+
+async function twentyPatchTask(id: string, data: Record<string, unknown>): Promise<void> {
+  const key = readFileSync(TWENTY_KEY_FILE, "utf8").trim();
+  await fetch(`${TWENTY}/rest/tasks/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" }, body: JSON.stringify(data), signal: AbortSignal.timeout(15_000) });
+}
+
+async function twentyWebhook(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  const chunks: Buffer[] = [];
+  for await (const c of req) chunks.push(c as Buffer);
+  let payload: any;
+  try { payload = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return send(res, 400, { error: "bad JSON" }); }
+  const ts = String(req.headers["x-twenty-webhook-timestamp"] ?? "");
+  const sig = String(req.headers["x-twenty-webhook-signature"] ?? "");
+  const nonce = String(req.headers["x-twenty-webhook-nonce"] ?? "");
+  const want = createHmac("sha256", token()).update(`${ts}:${JSON.stringify(payload)}`).digest("hex");
+  const fresh = Math.abs(Date.now() - Number(ts)) < 5 * 60_000;
+  if (!ts || sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want)) || !fresh || seenNonces.has(nonce)) return send(res, 401, { error: "bad signature" });
+  seenNonces.add(nonce); if (seenNonces.size > 500) seenNonces.clear();
+  send(res, 200, { ok: true }); // Twenty waits only 5 s; the work continues below.
+  const rec = payload?.record ?? {};
+  const title = String(rec.title ?? "");
+  if (payload?.eventName !== "task.created" || !/^ask paperclip\b/i.test(title) || !rec.id) return;
+  const question = [title.replace(/^ask paperclip\s*[:\-–]?\s*/i, ""), rec.bodyV2?.markdown ?? ""].filter((x) => String(x).trim()).join("\n\n");
+  try {
+    await twentyPatchTask(rec.id, { status: "IN_PROGRESS" });
+    const r = await askPaperclipWait(question || title, "Twenty CRM", title.slice(0, 90));
+    await twentyPatchTask(rec.id, { status: r.ok ? "DONE" : "TODO", bodyV2: { markdown: `${rec.bodyV2?.markdown ? rec.bodyV2.markdown + "\n\n" : ""}**Paperclip ${r.issue} (${r.status}):** ${r.answer}` } });
+  } catch (e) {
+    console.error("twenty -> paperclip failed:", (e as Error).message);
+  }
+}
+
 export async function handleBridge(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if ((req.url ?? "").split("?")[0] === "/api/bridge/twenty-webhook" && req.method === "POST") return twentyWebhook(req, res);
   if (!authed(req)) return send(res, 401, { error: "NODE app token required (Authorization: Bearer <token>)" });
   const url = (req.url ?? "").split("?")[0];
   if (req.method !== "POST") return send(res, 405, { error: "POST only" });
