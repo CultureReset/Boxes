@@ -14,6 +14,8 @@ export interface AppEntry {
   desktopFile?: string;
   url?: string;
   frameUrl?: string;
+  /** "tab": open top-level (apps with logins or that block framing). */
+  openIn?: "tab";
   parent?: string;
   includes?: string[];
   package?: string;

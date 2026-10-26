@@ -20,6 +20,7 @@ import { qualify, type AppProvider } from "./types.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
+  open?: "tab" | "frame";
   slug: string;
   parent?: string;
   includes?: string[];
@@ -35,12 +36,21 @@ export interface WebApp {
 /** Only what you actually added. The catalog is a separate, read-only menu. */
 const store = new WorldStore<WebApp[]>("webapps", () => []);
 
+/** Per-app "open" from config/webapps.json (saved apps are copies, so read it live). */
+function openModeFromConfig(slug: string): string | undefined {
+  try {
+    const p = WEBAPPS_FILE;
+    const list = JSON.parse(readFileSync(p, "utf8")) as { slug: string; open?: string }[];
+    return list.find((x) => x.slug === slug)?.open;
+  } catch { return undefined; }
+}
+
 function windowClass(slug: string): string {
   return `nodeos-web-${slug}`;
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**

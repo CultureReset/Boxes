@@ -6,7 +6,8 @@
     "comment": "AI assistant UI",
     "color": "#0a84ff",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/openjarvis.png"
+    "icon": "/home/steve/.local/share/node-icons/openjarvis.png",
+    "open": "tab"
   },
   {
     "slug": "twenty-crm",
@@ -15,17 +16,22 @@
     "comment": "CRM",
     "color": "#5e5ce6",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/twenty-crm.png"
+    "icon": "/home/steve/.local/share/node-icons/twenty-crm.png",
+    "open": "tab"
   },
   {
     "slug": "paperclip",
-    "includes": ["OpenClaw", "Hermes"],
+    "includes": [
+      "OpenClaw",
+      "Hermes"
+    ],
     "name": "Paperclip",
     "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10443/",
     "comment": "Agent company",
     "color": "#ff9f0a",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/paperclip.png"
+    "icon": "/home/steve/.local/share/node-icons/paperclip.png",
+    "open": "tab"
   },
   {
     "slug": "n8n",
@@ -34,7 +40,8 @@
     "comment": "Workflow automation",
     "color": "#ff375f",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/n8n.png"
+    "icon": "/home/steve/.local/share/node-icons/n8n.png",
+    "open": "tab"
   },
   {
     "slug": "litellm",
@@ -43,7 +50,8 @@
     "comment": "LLM proxy admin",
     "color": "#30d158",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/litellm.png"
+    "icon": "/home/steve/.local/share/node-icons/litellm.png",
+    "open": "tab"
   },
   {
     "slug": "searxng",
@@ -62,7 +70,8 @@
     "comment": "Agent gateway control UI",
     "color": "#ff453a",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/openclaw.png"
+    "icon": "/home/steve/.local/share/node-icons/openclaw.png",
+    "open": "tab"
   },
   {
     "slug": "uptime-kuma",
@@ -71,7 +80,8 @@
     "comment": "Service monitor",
     "color": "#30d158",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/uptime-kuma.png"
+    "icon": "/home/steve/.local/share/node-icons/uptime-kuma.png",
+    "open": "tab"
   },
   {
     "slug": "navidrome",
@@ -80,7 +90,8 @@
     "comment": "Music",
     "color": "#bf5af2",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/navidrome.png"
+    "icon": "/home/steve/.local/share/node-icons/navidrome.png",
+    "open": "tab"
   },
   {
     "slug": "crawl4ai",

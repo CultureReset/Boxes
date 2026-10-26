@@ -17,6 +17,12 @@ export async function openWindowView(w: WindowEntry): Promise<void> {
 }
 
 export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error" | "info") => void): Promise<void> {
+  // Apps with a login, or that refuse to be framed, open as a real page so
+  // cookies are first-party (iOS Safari drops them inside cross-origin frames).
+  if (a.provider === "web" && a.openIn === "tab" && a.url) {
+    if (!window.open(a.url, "_blank", "noopener")) window.location.href = a.url;
+    return;
+  }
   const web = a.frameUrl ?? a.url;
   if (web && a.provider === "web") return showAppView({ kind: "web", url: web, title: a.name });
   // Desktop / phone program: reuse its window if it is already open.
