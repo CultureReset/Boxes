@@ -5,6 +5,7 @@ import { CinemaHome } from "./homes/CinemaHome";
 import type { ScreenProps } from "../modules/registry";
 import { AskNode } from "../components/AskNode";
 import { CallComputer } from "../components/CallComputer";
+import { TalkNode } from "../components/TalkNode";
 
 /**
  * Home is whichever look the active world chose. Each look is a separate
@@ -20,5 +21,5 @@ export const LOOKS = {
 export function Home(props: ScreenProps) {
   const { layout } = useLayout();
   const Look = LOOKS[layout?.look ?? "dashboard"]?.component ?? DashboardHome;
-  return <><CallComputer /><AskNode /><Look {...props} /></>;
+  return <><CallComputer /><TalkNode /><AskNode /><Look {...props} /></>;
 }
