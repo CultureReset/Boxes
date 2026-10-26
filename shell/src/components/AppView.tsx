@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { ChevronLeft, RotateCw, Monitor, Smartphone } from "lucide-react";
 import type { AppViewTarget } from "../lib/openApp";
+import { NativeApp } from "../native/NativeApp";
 
 /** The in-app view: a web app in a frame, or the live stream of a desktop window. */
 export function AppView() {
@@ -33,7 +34,7 @@ export function AppView() {
         <button type="button" className="icon-btn" aria-label="Reload" onClick={() => setN((x) => x + 1)}><RotateCw size={18} /></button>
       </div>
       <div style={{ flex: 1, position: "relative", overflow: "auto", WebkitOverflowScrolling: "touch" }}>
-        {t.kind === "web" ? (
+        {t.kind === "native" ? <NativeApp key={n} slug={t.slug} n={n} /> : t.kind === "web" ? (
           desk ? (
             <iframe key={n} src={t.url} title={t.title} allow="clipboard-read; clipboard-write; microphone; camera; fullscreen"
               style={{ border: 0, width: W, height: `${100 / scale}%`, transform: `scale(${scale})`, transformOrigin: "0 0", position: "absolute", inset: 0 }} />

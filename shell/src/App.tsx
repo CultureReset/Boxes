@@ -1,4 +1,6 @@
 import { AppView } from "./components/AppView";
+import { DoorGate } from "./components/DoorGate";
+import { door } from "./lib/door";
 import { useEffect, useState } from "react";
 import { LogOut, Lock, Moon, Power, RefreshCw, Settings as SettingsIcon, Users } from "lucide-react";
 import { useRoute, navigate } from "./lib/router";
@@ -167,6 +169,10 @@ function Shell() {
                 <span className="t grow">{l}</span>
               </button>
             ))}
+            <button type="button" className="list-row" onClick={() => void door.logout().then(() => location.reload())}>
+              <span className="ic" style={{ ["--ic" as string]: "#8e8e93" }}><Power size={18} /></span>
+              <span className="t grow">Sign out of NODE</span>
+            </button>
           </div>
         </Sheet>
       )}
@@ -181,7 +187,7 @@ export default function App() {
       <WorldProvider>
         <LayoutProvider>
           <ToastProvider>
-            <Shell />
+            <DoorGate><Shell /></DoorGate>
           </ToastProvider>
         </LayoutProvider>
       </WorldProvider>

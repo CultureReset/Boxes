@@ -22,6 +22,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     data = text;
   }
   if (!res.ok) {
+    if (res.status === 401) window.dispatchEvent(new Event("node:signed-out"));
     const msg = (data as { error?: string } | null)?.error ?? res.statusText;
     throw new ApiError(res.status, msg);
   }
