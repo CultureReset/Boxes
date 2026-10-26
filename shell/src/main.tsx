@@ -1,3 +1,5 @@
+// The door hands back #door_token for cross-site front ends; NODE uses the cookie, so drop it from the URL.
+if (location.hash.includes("door_token=")) history.replaceState(null, "", location.pathname + location.search);
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App";

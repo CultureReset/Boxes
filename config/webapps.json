@@ -7,7 +7,7 @@
     "color": "#0a84ff",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/openjarvis.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "twenty-crm",
@@ -17,7 +17,7 @@
     "color": "#5e5ce6",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/twenty-crm.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "paperclip",
@@ -31,7 +31,7 @@
     "color": "#ff9f0a",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/paperclip.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "n8n",
@@ -41,7 +41,7 @@
     "color": "#ff375f",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/n8n.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "litellm",
@@ -51,7 +51,7 @@
     "color": "#30d158",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/litellm.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "searxng",
@@ -71,7 +71,7 @@
     "color": "#ff453a",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/openclaw.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "uptime-kuma",
@@ -81,7 +81,7 @@
     "color": "#30d158",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/uptime-kuma.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "navidrome",
@@ -91,7 +91,7 @@
     "color": "#bf5af2",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/navidrome.png",
-    "open": "tab"
+    "open": "frame"
   },
   {
     "slug": "crawl4ai",

@@ -2,6 +2,7 @@ import http from "node:http";
 import net from "node:net";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { requireDoor, isRemote, doorUser, stripDoorCookie } from "./doorauth.js";
 import { fileURLToPath } from "node:url";
 
 /**
@@ -10,7 +11,11 @@ import { fileURLToPath } from "node:url";
  * remove the headers that stop the NODE app from showing the page inside its
  * own in-app view: X-Frame-Options and CSP frame-ancestors.
  */
-export interface Frame { slug: string; upstream: string; localPort: number; servePort: number; path: string }
+export interface Frame { slug: string; upstream: string; localPort: number; servePort: number; path: string;
+  /** Trusted reverse-proxy login (e.g. Navidrome ReverseProxyUserHeader): header + user set by the proxy only. */
+  remoteUserHeader?: string; remoteUser?: string;
+  /** Source address for upstream connections (the app whitelists only this address). */
+  localAddress?: string }
 
 const FILE = process.env.NODEOS_FRAMES ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "../../config/frames.json");
 
@@ -65,22 +70,34 @@ const AUTO: Record<string, (req: http.IncomingMessage, res: http.ServerResponse,
   },
 };
 
+function upstreamHeaders(f: Frame, h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
+  const out: http.OutgoingHttpHeaders = { ...h };
+  const c = stripDoorCookie(h.cookie); if (c) out.cookie = c; else delete out.cookie;
+  if (f.remoteUserHeader) {
+    delete out[f.remoteUserHeader.toLowerCase()]; // never trust a client-sent identity header
+    if (f.remoteUser) out[f.remoteUserHeader.toLowerCase()] = f.remoteUser;
+  }
+  return out;
+}
+
 function start(f: Frame): void {
   const up = new URL(f.upstream);
   const port = Number(up.port || 80);
   const srv = http.createServer(async (req, res) => {
+    if (!(await requireDoor(req, res, true))) return;
     if (AUTO[f.slug] && (await AUTO[f.slug](req, res, up))) return;
-    const p = http.request({ host: up.hostname, port, method: req.method, path: req.url, headers: req.headers }, (r) => {
+    const p = http.request({ host: up.hostname, port, method: req.method, path: req.url, headers: upstreamHeaders(f, req.headers), localAddress: f.localAddress }, (r) => {
       res.writeHead(r.statusCode ?? 502, r.statusMessage, fixHeaders(r.headers));
       r.pipe(res);
     });
     p.on("error", (e) => { if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" }); res.end(`${f.slug} is not reachable on the desktop: ${e.message}`); });
     req.pipe(p);
   });
-  srv.on("upgrade", (req, sock, head) => {
-    const u = net.connect(port, up.hostname, () => {
+  srv.on("upgrade", async (req, sock, head) => {
+    if (isRemote(req) && !(await doorUser(req))) { sock.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"); return; }
+    const u = net.connect({ port, host: up.hostname, localAddress: f.localAddress }, () => {
       const lines = [`${req.method} ${req.url} HTTP/1.1`];
-      for (let i = 0; i < req.rawHeaders.length; i += 2) lines.push(`${req.rawHeaders[i]}: ${req.rawHeaders[i + 1]}`);
+      for (const [k, v] of Object.entries(upstreamHeaders(f, req.headers))) for (const x of Array.isArray(v) ? v : [v]) if (x !== undefined) lines.push(`${k}: ${x}`);
       u.write(lines.join("\r\n") + "\r\n\r\n");
       if (head?.length) u.write(head);
       u.pipe(sock); sock.pipe(u);

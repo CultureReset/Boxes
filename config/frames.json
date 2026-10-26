@@ -60,7 +60,10 @@
   "upstream": "http://127.0.0.1:4533",
   "localPort": 17809,
   "servePort": 24443,
-  "path": "/"
+  "path": "/",
+  "remoteUserHeader": "Remote-User",
+  "remoteUser": "matt",
+  "localAddress": "127.0.0.2"
  },
  {
   "slug": "crawl4ai",
