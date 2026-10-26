@@ -386,13 +386,13 @@ function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
   const u = new URL(DOOR);
   const sub = (req.url ?? "/").replace(/^\/door/, "") || "/";
   const headers: http.OutgoingHttpHeaders = {};
-  for (const k of ["content-type", "content-length", "accept", "cookie", "authorization", "user-agent"]) if (req.headers[k]) headers[k] = req.headers[k];
+  for (const k of ["content-type", "content-length", "accept", "cookie", "authorization", "user-agent", "mcp-session-id", "mcp-protocol-version"]) if (req.headers[k]) headers[k] = req.headers[k];
   const xff = req.headers["x-forwarded-for"];
   const peer = (req.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
   headers["x-forwarded-for"] = xff ? `${xff}` : peer;
   const up = http.request({ hostname: u.hostname, port: u.port, method: req.method, path: sub, headers }, (r) => {
     const out: http.OutgoingHttpHeaders = { "Cache-Control": "no-store" };
-    for (const k of ["content-type", "content-length", "set-cookie"]) if (r.headers[k]) out[k] = r.headers[k];
+    for (const k of ["content-type", "content-length", "set-cookie", "mcp-session-id"]) if (r.headers[k]) out[k] = r.headers[k];
     res.writeHead(r.statusCode ?? 502, out);
     r.pipe(res);
   });

@@ -1,6 +1,6 @@
 import { api } from "../api/client";
 import type { AppEntry, WindowEntry } from "../api/types";
-import { NATIVE } from "../native/NativeApp";
+import { NATIVE, nativeFor } from "../native/NativeApp";
 
 /** Every NODE app opens as a NODE-native screen (rebuilt in NODE, same backend via the door). */
 
@@ -12,6 +12,7 @@ export type AppViewTarget =
   | { kind: "native"; slug: string; title: string };
 
 export function showAppView(t: AppViewTarget): void {
+  if (t.kind === "web") { const slug = nativeFor(t.url); if (slug) t = { kind: "native", slug, title: t.title }; }
   window.dispatchEvent(new CustomEvent<AppViewTarget>("node:app-view", { detail: t }));
 }
 

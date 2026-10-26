@@ -117,5 +117,13 @@
     "comment": "Media server status",
     "color": "#64d2ff",
     "category": "This Computer"
+  },
+  {
+    "slug": "mcp",
+    "name": "MCP",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10000/mcp",
+    "comment": "Connect AI clients to NODE",
+    "color": "#8e8e93",
+    "category": "This Computer"
   }
 ]
