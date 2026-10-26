@@ -190,6 +190,18 @@ export function ServicesRow(_: RowProps) {
   const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
   return (
     <Section title="Running on This Computer">
+      {data.health && (
+        <ItemCard
+          key="health"
+          icon={icon(data.health.ok ? "#30d158" : "#ff453a")}
+          title={data.health.ok ? "Health: all good" : data.health.stale ? "Health: check not running" : `Health: ${data.health.failures} failing`}
+          subtitle={data.health.checkedAt ? `Checked ${data.health.checkedAt}` : "No health check yet"}
+          meta={<><Dot state={data.health.ok ? "on" : "alert"} /> {data.health.checks.length} checks</>}
+        />
+      )}
+      {data.health?.checks.filter((c) => !c.ok).map((c) => (
+        <ItemCard key={`h${c.name}`} icon={icon("#ff453a")} title={c.name} subtitle={c.detail} meta={<><Dot state="alert" /> Failing</>} />
+      ))}
       {linked.map((p) => (
         <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} onClick={() => open(p.url!)} />
       ))}

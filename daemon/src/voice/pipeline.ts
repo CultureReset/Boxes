@@ -129,7 +129,7 @@ export async function voiceStatus() {
   return {
     hearing: await sttModel(),
     voice: await ttsEngine(),
-    model: (await llm.available()) ? (process.env.NODEOS_LLM_MODEL ?? "qwen2.5:3b") : "none",
+    model: (await llm.available()) ? (process.env.NODEOS_LLM_MODEL ?? "fast") : "none",
     ...unroutedRate(),
   };
 }

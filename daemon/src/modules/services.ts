@@ -1,3 +1,6 @@
+import { readFile } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { run, runJson } from "../exec.js";
 
 /**
@@ -21,9 +24,26 @@ export interface PortEntry {
   url: string | null;
 }
 
+export interface HealthCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+/** Written every 5 min by ~/ang/bin/node-healthcheck (node-health.timer). */
+export interface HealthReport {
+  checkedAt: string | null;
+  ok: boolean;
+  /** True when the last check is older than 15 minutes (timer not running). */
+  stale: boolean;
+  failures: number;
+  checks: HealthCheck[];
+}
+
 export interface ServicesReport {
   services: ServiceEntry[];
   ports: PortEntry[];
+  health: HealthReport;
 }
 
 async function systemdUnits(): Promise<ServiceEntry[]> {
@@ -87,7 +107,19 @@ async function listeningPorts(served: Map<number, string>): Promise<PortEntry[]>
   return [...byPort.values()].sort((a, b) => a.port - b.port);
 }
 
+const HEALTH_FILE = path.join(os.homedir(), ".local/state/node-health/status.json");
+
+export async function healthReport(): Promise<HealthReport> {
+  try {
+    const j = JSON.parse(await readFile(HEALTH_FILE, "utf8")) as { checkedAt: string; epoch: number; ok: boolean; failures: number; checks: HealthCheck[] };
+    const stale = Date.now() / 1000 - j.epoch > 15 * 60;
+    return { checkedAt: j.checkedAt, ok: j.ok && !stale, stale, failures: j.failures, checks: j.checks };
+  } catch {
+    return { checkedAt: null, ok: false, stale: true, failures: 0, checks: [] };
+  }
+}
+
 export async function servicesReport(): Promise<ServicesReport> {
-  const [units, containers, served] = await Promise.all([systemdUnits(), dockerContainers(), servedPorts()]);
-  return { services: [...units, ...containers], ports: await listeningPorts(served) };
+  const [units, containers, served, health] = await Promise.all([systemdUnits(), dockerContainers(), servedPorts(), healthReport()]);
+  return { services: [...units, ...containers], ports: await listeningPorts(served), health };
 }

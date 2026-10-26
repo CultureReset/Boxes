@@ -13,12 +13,12 @@ import { CAPABILITIES } from "../platform/capabilities.js";
  * what makes a 3B model on a mini-PC sufficient: it is choosing and phrasing,
  * not knowing.
  *
- * Any OpenAI-compatible endpoint — Ollama, llama.cpp's server, vLLM. The box
+ * Any OpenAI-compatible endpoint; on this box that is llama-swap (:8080). The box
  * ships pointed at localhost. No key, no network, no per-question cost.
  */
 
-const BASE = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:11434/v1";
-const MODEL = process.env.NODEOS_LLM_MODEL ?? "qwen2.5:3b";
+const BASE = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:8080/v1";
+const MODEL = process.env.NODEOS_LLM_MODEL ?? "fast";
 const TIMEOUT_MS = 20_000;
 
 export interface Choice {

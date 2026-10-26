@@ -292,7 +292,22 @@ export interface PortEntry {
   url: string | null;
 }
 
+export interface HealthCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface HealthReport {
+  checkedAt: string | null;
+  ok: boolean;
+  stale: boolean;
+  failures: number;
+  checks: HealthCheck[];
+}
+
 export interface ServicesReport {
   services: ServiceEntry[];
   ports: PortEntry[];
+  health?: HealthReport;
 }

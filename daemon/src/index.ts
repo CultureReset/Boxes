@@ -25,7 +25,7 @@ import { listThemes, setTheme, listBackgrounds, nextBackground, setBackground } 
 import { listProviders, personasForWorld, ask } from "./modules/agents.js";
 import { listWorlds, switchWorld, saveWorld, deleteWorld, type World } from "./modules/worlds.js";
 import { weather } from "./modules/weather.js";
-import { servicesReport } from "./modules/services.js";
+import { servicesReport, healthReport } from "./modules/services.js";
 import { check } from "./modules/features.js";
 import { TEMPLATES, listAutomations, saveAutomation, deleteAutomation, runAutomation, startScheduler } from "./modules/automations.js";
 import { listNotifications, markRead, clearAll, sendDesktop, watchDbus } from "./modules/notifications.js";
@@ -206,6 +206,7 @@ api.get("/api/icon/:name", async ({ params, res }) => {
 
 // ---- Windows (Hyprland) ------------------------------------------------
 api.get("/api/services", () => servicesReport());
+api.get("/api/health", () => healthReport());
 api.get("/api/windows", () => listWindows());
 api.post("/api/windows/focus", async ({ body }) => ({ ok: await focusWindow(str(obj(body).address, "address")) }));
 api.post("/api/windows/close", async ({ body }) => ({ ok: await closeWindow(str(obj(body).address, "address")) }));
