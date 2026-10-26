@@ -36,6 +36,7 @@ import { platformConfig, savePlatformConfig, isConnected } from "./platform/conf
 import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
+import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
@@ -146,8 +147,11 @@ api.post("/api/voice/text", async ({ body }) => {
 /** Audio in, audio back. 16kHz mono WAV, base64. What a phone bridge posts. */
 api.post("/api/voice/heard", async ({ body }) => {
   const b = obj(body);
-  const wav = Buffer.from(str(b.wav, "wav", { max: 12_000_000 }), "base64");
-  const turn = await handleAudio(wav, (str(b.channel, "channel", { optional: true, max: 16 }) || "phone") as Channel);
+  const channel = (str(b.channel, "channel", { optional: true, max: 16 }) || "phone") as Channel;
+  // A browser posts its own recording format (webm/mp4) as `audio` + `mime`; a phone bridge posts 16 kHz WAV.
+  const turn = b.audio
+    ? await transcribeAny(Buffer.from(str(b.audio, "audio", { max: 40_000_000 }), "base64"), str(b.mime, "mime", { optional: true, max: 64 }) ?? "").then(async (heard) => ({ ...(await handle(heard, channel)), heard }))
+    : await handleAudio(Buffer.from(str(b.wav, "wav", { max: 12_000_000 }), "base64"), channel);
   const spoken = await reply(turn);
   return { ...turn, wav: spoken ? spoken.wav.toString("base64") : null, engine: spoken?.engine ?? "none" };
 });
@@ -306,6 +310,32 @@ api.get("/api/notifications", () => listNotifications());
 api.post("/api/notifications/read", ({ body }) => markRead(obj(body).all ? "all" : ((obj(body).ids as string[]) ?? [])));
 api.post("/api/notifications/clear", () => clearAll());
 api.post("/api/notifications/send", ({ body }) => sendDesktop(str(obj(body).title, "title", { max: 200 }), str(obj(body).body, "body", { optional: true, max: 1000 })));
+
+// ---- Chat with a chosen model ---------------------------------------------
+api.get("/api/chat/models", () => chatModels());
+api.get("/api/chats", () => listChats());
+api.get("/api/chats/:id", ({ params }) => getChat(params.id));
+api.delete("/api/chats/:id", ({ params }) => deleteChat(params.id));
+api.post("/api/chats/:id/model", ({ params, body }) => setChatModel(params.id, str(obj(body).model, "model", { max: 128 })));
+api.post("/api/chat/send", ({ body }) => {
+  const b = obj(body);
+  const ids = Array.isArray(b.attachments) ? (b.attachments as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10) : [];
+  return chatSend(str(b.chat, "chat", { optional: true, max: 64 }) || null, str(b.text, "text", { optional: true, max: 20_000 }) ?? "", str(b.model, "model", { max: 128 }), ids);
+});
+api.post("/api/chat/upload", ({ body }) => {
+  const b = obj(body);
+  return chatUpload(str(b.name, "name", { max: 255 }), str(b.type, "type", { optional: true, max: 128 }) ?? "", Buffer.from(str(b.data, "data", { max: 40_000_000 }), "base64"));
+});
+api.get("/api/chat/upload/:id", async ({ params, res }) => {
+  const u = await uploadFile(params.id);
+  res.writeHead(200, { "Content-Type": u.type, "Content-Disposition": `inline; filename="${u.name.replace(/"/g, "")}"`, "Cache-Control": "private, max-age=86400" });
+  res.end(await readFile(u.file));
+});
+/** Any browser recording (webm, mp4, wav), base64. Returns the words only; nothing is run. */
+api.post("/api/voice/transcribe", async ({ body }) => {
+  const b = obj(body);
+  return { text: await transcribeAny(Buffer.from(str(b.audio, "audio", { max: 40_000_000 }), "base64"), str(b.mime, "mime", { optional: true, max: 64 }) ?? "") };
+});
 
 // ---- Static shell -------------------------------------------------------
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".woff2": "font/woff2", ".json": "application/json", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };

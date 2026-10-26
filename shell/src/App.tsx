@@ -12,6 +12,8 @@ import { AskBar } from "./components/AskBar";
 import { SearchOverlay } from "./components/SearchOverlay";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { JobPanel } from "./components/JobPanel";
+import { ChatPanel } from "./components/ChatPanel";
+import { store, AGENT, type Outgoing } from "./lib/chat";
 import { Sheet } from "./components/Sheet";
 import { useMenu } from "./components/Menu";
 import { screen as screenModule } from "./modules/registry";
@@ -31,6 +33,18 @@ function Shell() {
   const [job, setJob] = useState<string | null>(null);
   const [power, setPower] = useState(false);
   const [persona, setPersona] = useState("auto");
+  const [model, setModelState] = useState(store.model);
+  const setModel = (m: string) => { store.model = m; setModelState(m); };
+  const [chatId, setChatIdState] = useState<string | null>(store.chat);
+  const setChatId = (id: string | null) => { store.chat = id; setChatIdState(id); };
+  const [chatOpen, setChatOpen] = useState(false);
+  const [outgoing, setOutgoing] = useState<(Outgoing & { n: number }) | null>(null);
+  const onChat = (o: Outgoing) => { setOutgoing((p) => ({ ...o, n: (p?.n ?? 0) + 1 })); setChatOpen(true); };
+  const pickModel = (m: string) => {
+    setModel(m);
+    if (m !== AGENT) setChatOpen(true);
+    if (m !== AGENT && chatId) void api.post(`/api/chats/${chatId}/model`, { model: m }).catch(() => {});
+  };
   const { data: agents } = useApi<AgentsInfo>("/api/agents", ["world"]);
   const { data: notifList } = useApi<Notification[]>("/api/notifications", ["notification", "notifications"]);
   const unread = (notifList ?? []).filter((n) => !n.read).length;
@@ -121,7 +135,8 @@ function Shell() {
           <Screen sub={route.sub} params={route.params} onJob={setJob} />
         </div>
       </main>
-      {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} />}
+      {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
+      {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} />}
       <TabBar active={screen} />
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {notifs && <NotificationsPanel onClose={() => setNotifs(false)} />}
