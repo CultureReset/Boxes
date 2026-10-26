@@ -15,6 +15,9 @@ export interface AppEntry {
   url?: string;
   /** Same app, through the frame proxy, for NODE's in-app view. */
   frameUrl?: string;
+  /** Slug of the app this one lives under (shown inside it, not top level). */
+  parent?: string;
+  includes?: string[];
   package?: string;
 }
 

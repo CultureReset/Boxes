@@ -19,6 +19,10 @@ export interface ControlEntry {
   url: string | null;
   why: string;
   self?: boolean;
+  /** Shown inside this entry instead of as its own top-level entry. */
+  parent?: string;
+  /** Parts with no service of their own, listed inside this entry. */
+  includes?: { name: string; why: string }[];
 }
 
 export interface UnitState {

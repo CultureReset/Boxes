@@ -14,6 +14,8 @@ export interface AppEntry {
   desktopFile?: string;
   url?: string;
   frameUrl?: string;
+  parent?: string;
+  includes?: string[];
   package?: string;
 }
 
@@ -328,6 +330,8 @@ export interface ControlStatus {
   url: string | null;
   why: string;
   self?: boolean;
+  parent?: string;
+  includes?: { name: string; why: string }[];
   status: "running" | "partial" | "stopped";
   unitStates: ControlUnitState[];
 }

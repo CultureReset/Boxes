@@ -35,6 +35,18 @@ function useLaunch() {
   };
 }
 
+/** The ⋯ menu on a parent tile: open it, or open one of the apps that live under it. */
+function useKidsMenu(apps: AppEntry[] | null | undefined) {
+  const menu = useMenu();
+  const toast = useToast();
+  const fn = (a: AppEntry) => {
+    const kids = (apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id);
+    if (!kids.length) return undefined;
+    return (e: React.MouseEvent) => menu.open(e, [{ label: `Open ${a.name}`, onClick: () => void openApp(a, toast) }, ...kids.map((k) => ({ label: `Open ${k.name}`, onClick: () => void openApp(k, toast) }))]);
+  };
+  return Object.assign(fn, { element: menu.element });
+}
+
 function todayRange() {
   const t = new Date();
   return { from: new Date(t.getFullYear(), t.getMonth(), t.getDate()).toISOString(), to: new Date(t.getFullYear(), t.getMonth(), t.getDate() + 1).toISOString() };
@@ -93,18 +105,25 @@ export function ContinueRow(_: RowProps) {
   );
 }
 
+/** "Paperclip · with OpenClaw · Hermes" */
+function withParts(a: AppEntry, text: string): string {
+  return a.includes?.length ? `${text} · with ${a.includes.join(" · ")}` : text;
+}
+
 export function AppsRow(_: RowProps) {
   const { apps } = useApps();
+  const kidsMenu = useKidsMenu(apps);
   const { data: windows } = useApi<WindowEntry[]>("/api/windows", ["windows"]);
   const launch = useLaunch();
   const all = apps ?? [];
-  const list = [...all.filter((a) => a.provider === "web"), ...all.filter((a) => a.provider === "linux")];
+  const list = [...all.filter((a) => a.provider === "web" && !a.parent), ...all.filter((a) => a.provider === "linux")];
   return (
     <Section title="My Apps" onTitle={() => navigate("apps")}>
+      {kidsMenu.element}
       {apps === null && [1, 2, 3, 4].map((i) => <Skeleton key={i} h={92} w={300} />)}
       {list.slice(0, 24).map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.comment || "App"} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} />;
+        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment || "App")} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
     </Section>
   );
@@ -112,14 +131,16 @@ export function AppsRow(_: RowProps) {
 
 export function WebAppsRow(_: RowProps) {
   const { apps } = useApps();
+  const kidsMenu = useKidsMenu(apps);
   const { data: windows } = useApi<WindowEntry[]>("/api/windows", ["windows"]);
   const launch = useLaunch();
-  const list = (apps ?? []).filter((a) => a.provider === "web");
+  const list = (apps ?? []).filter((a) => a.provider === "web" && !a.parent);
   return (
     <Section title="Web Apps" onTitle={() => navigate("apps", undefined, { filter: "web" })} link="Add" onLink={() => navigate("apps", undefined, { filter: "web", add: "1" })}>
+      {kidsMenu.element}
       {list.map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={a.comment} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} onClick={() => launch(a.id)} />;
+        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment)} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
       {apps && list.length === 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#0a84ff" }}><Globe size={26} /></span>} title="Add a web app" subtitle="Toast, Facebook, Gmail and more" meta={<Pill><Plus size={11} /> Add</Pill>} onClick={() => navigate("apps", undefined, { filter: "web", add: "1" })} />}
     </Section>
@@ -203,15 +224,27 @@ export function ServicesRow(_: RowProps) {
     void control.reload();
     void reload();
   };
+  const itemsFor = (c: ControlStatus, prefix = "") => [
+    ...(c.url ? [{ label: `${prefix}Open`, onClick: () => showAppView({ kind: "web", url: c.url!, title: c.name }) }] : []),
+    ...(c.self ? [] : [{ label: `${prefix}Start`, icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
+    { label: `${prefix}Restart`, onClick: () => void act(c, "restart") },
+    ...(c.self ? [] : [{ label: `${prefix}Stop`, danger: true, onClick: () => void act(c, "stop") }]),
+  ];
+  // Entries with a parent (OpenClaw under Paperclip) live inside the parent's entry.
+  const childrenOf = (c: ControlStatus) => (control.data ?? []).filter((x) => x.parent === c.id);
   const controlMenu = (e: React.MouseEvent, c: ControlStatus) =>
     menu.open(e, [
-      ...(c.url ? [{ label: "Open", onClick: () => showAppView({ kind: "web", url: c.url!, title: c.name }) }] : []),
-      ...(c.self ? [] : [{ label: "Start", icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
-      { label: "Restart", onClick: () => void act(c, "restart") },
-      ...(c.self ? [] : [{ label: "Stop", danger: true, onClick: () => void act(c, "stop") }]),
+      ...itemsFor(c),
+      ...childrenOf(c).flatMap((ch) => [{ divider: true, label: "" }, ...itemsFor(ch, `${ch.name.split(" ")[0]}: `)]),
     ]);
+  const partsLine = (c: ControlStatus) => {
+    const parts = [...childrenOf(c).map((ch) => `${ch.name.split(" ")[0]} ${ch.status === "running" ? "●" : "○"}`), ...(c.includes ?? []).map((i) => i.name)];
+    return parts.length ? ` · with ${parts.join(" · ")}` : "";
+  };
   const linked = data.ports.filter((p) => p.url);
-  const running = data.services.filter((s) => s.running);
+  // Units of a child entry (OpenClaw under Paperclip) are shown inside the parent, not here.
+  const childUnits = new Set((control.data ?? []).filter((c) => c.parent).flatMap((c) => c.units.map((u) => u.replace(/\.service$/, ""))));
+  const running = data.services.filter((s) => s.running && !childUnits.has(s.name));
   const down = data.services.filter((s) => !s.running && s.kind === "docker");
   const open = (url: string) => showAppView({ kind: "web", url, title: new URL(url, location.href).host });
   const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
@@ -229,12 +262,12 @@ export function ServicesRow(_: RowProps) {
       {data.health?.checks.filter((c) => !c.ok).map((c) => (
         <ItemCard key={`h${c.name}`} icon={icon("#ff453a")} title={c.name} subtitle={c.detail} meta={<><Dot state="alert" /> Failing</>} />
       ))}
-      {control.data?.map((c) => (
+      {control.data?.filter((c) => !c.parent).map((c) => (
         <ItemCard
           key={`c${c.id}`}
           icon={icon(c.status === "running" ? "#30d158" : c.status === "partial" ? "#ff9f0a" : c.tier === "core" ? "#ff453a" : "#8e8e93")}
           title={c.name}
-          subtitle={c.why}
+          subtitle={`${c.why}${partsLine(c)}`}
           meta={<><Dot state={c.status === "running" ? "on" : c.status === "partial" ? "warn" : c.tier === "core" ? "alert" : "off"} /> {c.status === "running" ? "Running" : c.status === "partial" ? "Partly running" : "Stopped"} · {c.tier === "core" ? "Core" : "On demand"}</>}
           onClick={(e) => controlMenu(e, c)}
           onMore={(e) => controlMenu(e, c)}

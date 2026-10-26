@@ -1,5 +1,7 @@
 import { frames } from "../../frameproxy.js";
-import { existsSync } from "node:fs";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { has, launchDetached } from "../../exec.js";
 import { WorldStore } from "../worlds.js";
 import { catalogEntries } from "../catalog.js";
@@ -19,6 +21,8 @@ import { qualify, type AppProvider } from "./types.js";
  */
 export interface WebApp {
   slug: string;
+  parent?: string;
+  includes?: string[];
   name: string;
   url: string;
   comment: string;
@@ -36,7 +40,7 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url) };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**
@@ -123,4 +127,14 @@ function frameUrlFor(slug: string, url: string): string | undefined {
   if (!f) return undefined;
   const u = new URL(url);
   return `https://${u.hostname}:${f.servePort}${f.path}`;
+}
+
+/** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
+ *  before it existed pick it up too. OpenClaw lives under Paperclip. */
+const WEBAPPS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../../config/webapps.json");
+function grouping(slug: string): { parent?: string; includes?: string[] } {
+  try {
+    const w = (JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as WebApp[]).find((x) => x.slug === slug);
+    return { parent: w?.parent, includes: w?.includes };
+  } catch { return {}; }
 }

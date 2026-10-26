@@ -69,13 +69,13 @@ export function Apps({ onJob, params }: ScreenProps) {
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (apps ?? []).filter((a) => (filter === "all" || a.provider === filter) && (!needle || a.name.toLowerCase().includes(needle) || a.comment.toLowerCase().includes(needle)));
+    return (apps ?? []).filter((a) => !a.parent && (filter === "all" || a.provider === filter) && (!needle || a.name.toLowerCase().includes(needle) || a.comment.toLowerCase().includes(needle)));
   }, [apps, q, filter]);
 
   const isOpen = (a: AppEntry) => windows?.some((w) => w.appId === a.id);
   const statusOf = (a: AppEntry) => (isOpen(a) ? "Open" : a.provider === "web" ? "Web app" : a.provider === "android" ? "On your phone" : a.source === "flatpak" ? "Flatpak" : "Installed");
   const card = (a: AppEntry) => (
-    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
+    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.includes?.length ? `${a.comment || statusOf(a)} · with ${a.includes.join(" · ")}` : a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id).map((k) => ({ label: `Open ${k.name}`, onClick: () => launch(k) })), ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
   );
 
   const groups = useMemo(() => {
