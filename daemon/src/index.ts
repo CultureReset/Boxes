@@ -41,7 +41,7 @@ import { platformConfig, savePlatformConfig, isConnected } from "./platform/conf
 import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
-import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend } from "./modules/chat.js";
+import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend, renameChat, logExchange } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
@@ -325,7 +325,26 @@ api.post("/api/notifications/send", ({ body }) => sendDesktop(str(obj(body).titl
 
 // ---- Chat with a chosen model ---------------------------------------------
 api.get("/api/chat/models", () => chatModels());
-api.get("/api/chats", () => listChats());
+api.get("/api/chats", ({ query }) => listChats(query.get("q") ?? ""));
+api.post("/api/chats/:id/rename", ({ params, body }) => renameChat(params.id, str(obj(body).title, "title", { max: 200 })));
+api.post("/api/chat/log", ({ body }) => {
+  const b = obj(body);
+  const items = (Array.isArray(b.items) ? b.items : []).slice(0, 20).map((x) => { const o = obj(x); return { role: (o.role === "user" ? "user" : "assistant") as "user" | "assistant", content: str(o.text, "text", { max: 20_000 }) }; });
+  return logExchange(str(b.source, "source", { max: 24 }).replace(/[^a-z0-9_-]/gi, "") || "talk", str(b.chat, "chat", { optional: true, max: 64 }) || null, items);
+});
+/** Streaming send: NDJSON lines {delta} ... then {done, chat, reply}. */
+api.post("/api/chat/stream", async ({ body, res }) => {
+  const b = obj(body);
+  const ids = Array.isArray(b.attachments) ? (b.attachments as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10) : [];
+  res.writeHead(200, { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
+  try {
+    const out = await chatSend(str(b.chat, "chat", { optional: true, max: 64 }) || null, str(b.text, "text", { optional: true, max: 20_000 }) ?? "", str(b.model, "model", { max: 128 }), ids,
+      (t) => res.write(JSON.stringify({ delta: t }) + "\n"));
+    res.end(JSON.stringify({ done: true, ...out }) + "\n");
+  } catch (e) {
+    res.end(JSON.stringify({ error: (e as Error).message.slice(0, 300) }) + "\n");
+  }
+});
 api.get("/api/chats/:id", ({ params }) => getChat(params.id));
 api.delete("/api/chats/:id", ({ params }) => deleteChat(params.id));
 api.post("/api/chats/:id/model", ({ params, body }) => setChatModel(params.id, str(obj(body).model, "model", { max: 128 })));

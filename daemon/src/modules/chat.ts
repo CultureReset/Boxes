@@ -34,6 +34,73 @@ const uploads = new JsonStore<Record<string, Attachment & { file: string; textFi
 
 const litellmKey = gatewayKey;
 
+
+/** One chat completion via LiteLLM; streams deltas to onDelta when given. Reasoning (<think>) is dropped. */
+async function complete(model: string, msgs: unknown[], onDelta?: (t: string) => void): Promise<string> {
+  const key = await litellmKey();
+  const r = await fetch(`${LITELLM}/chat/completions`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
+    body: JSON.stringify({ model, messages: msgs, stream: Boolean(onDelta) }),
+    signal: AbortSignal.timeout(600_000),
+  });
+  if (!onDelta || !r.ok || !r.body) {
+    const j = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string } }[]; error?: { message?: string } | string };
+    if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : (j.error?.message ?? `HTTP ${r.status}`));
+    const c = (j.choices?.[0]?.message?.content ?? "").replace(/^<think>[\s\S]*?<\/think>\s*/, "").trim();
+    if (onDelta && c) onDelta(c);
+    return c;
+  }
+  const dec = new TextDecoder(); let buf = "", out = "", thinking = false;
+  for await (const chunk of r.body as unknown as AsyncIterable<Uint8Array>) {
+    buf += dec.decode(chunk, { stream: true });
+    let i;
+    while ((i = buf.indexOf("\n")) >= 0) {
+      const line = buf.slice(0, i).trim(); buf = buf.slice(i + 1);
+      if (!line.startsWith("data:")) continue;
+      const d = line.slice(5).trim(); if (d === "[DONE]") continue;
+      try {
+        let t = (JSON.parse(d) as { choices?: { delta?: { content?: string } }[] }).choices?.[0]?.delta?.content ?? "";
+        if (!t) continue;
+        if (!out && !thinking && t.trimStart().startsWith("<think>")) thinking = true;
+        if (thinking) { const e = (out + t).indexOf("</think>"); out += t; if (e < 0) continue; t = out.slice(e + 8).trimStart(); out = ""; thinking = false; if (!t) continue; }
+        out += t; onDelta(t);
+      } catch { /* partial line */ }
+    }
+  }
+  return out.trim();
+}
+
+/** Log messages from elsewhere (Agent/Ask NODE answers, Talk to NODE) into a chat:
+ *  the given chat, or one chat per source per day. Returns the chat. */
+export async function logExchange(source: string, cid: string | null, items: { role: "user" | "assistant"; content: string }[]): Promise<{ chat: Chat }> {
+  const day = new Date().toLocaleDateString("en-CA");
+  const now = new Date().toISOString();
+  const all = await chats.read();
+  let c = cid ? all.find((x) => x.id === cid) : all.find((x) => x.id === `${source}-${day}`);
+  if (!c) {
+    const first = items.find((i) => i.role === "user")?.content ?? "";
+    c = cid || source === "agent"
+      ? { id: id(), title: first.slice(0, 60) || "New chat", model: source, createdAt: now, updatedAt: now, messages: [] }
+      : { id: `${source}-${day}`, title: `${source === "talk" ? "Talk to NODE" : source} · ${day}`, model: source, createdAt: now, updatedAt: now, messages: [] };
+    all.push(c);
+  }
+  for (const i of items) c.messages.push({ role: i.role, content: i.content.slice(0, 20_000), at: now, model: i.role === "assistant" ? source : undefined });
+  if (source === "agent") c.model = "agent";
+  c.updatedAt = now;
+  await chats.write(all);
+  return { chat: c };
+}
+
+export async function renameChat(cid: string, title: string): Promise<Chat> {
+  const all = await chats.read();
+  const c = all.find((x) => x.id === cid);
+  if (!c) throw new HttpError(404, "No such chat");
+  c.title = title.trim().slice(0, 80) || c.title;
+  await chats.write(all);
+  return c;
+}
+
 async function listIds(base: string, key?: string): Promise<string[]> {
   try {
     const r = await fetch(`${base}/models`, { headers: key ? { Authorization: `Bearer ${key}` } : {}, signal: AbortSignal.timeout(4000) });
@@ -122,8 +189,10 @@ export async function transcribeAny(audio: Buffer, mime: string): Promise<string
 
 /* ---------- chats ---------- */
 
-export async function listChats(): Promise<Omit<Chat, "messages">[]> {
+export async function listChats(q = ""): Promise<Omit<Chat, "messages">[]> {
+  const needle = q.trim().toLowerCase();
   return (await chats.read())
+    .filter((c) => !needle || c.title.toLowerCase().includes(needle) || c.messages.some((m) => m.content.toLowerCase().includes(needle)))
     .map(({ messages, ...c }) => ({ ...c, count: messages.length }))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
 }
@@ -170,7 +239,7 @@ async function userContent(m: ChatMessage, withImages: boolean): Promise<string 
   return images.length ? [{ type: "text", text }, ...images] : text;
 }
 
-export async function send(cid: string | null, text: string, model: string, attachmentIds: string[]): Promise<{ chat: Chat; reply: ChatMessage }> {
+export async function send(cid: string | null, text: string, model: string, attachmentIds: string[], onDelta?: (t: string) => void): Promise<{ chat: Chat; reply: ChatMessage }> {
   const available = await models();
   const meta = await uploads.read();
   const attachments = attachmentIds.map((a) => meta[a]).filter(Boolean).map(({ file: _f, textFile: _t, ...a }) => a as Attachment);
@@ -197,19 +266,9 @@ export async function send(cid: string | null, text: string, model: string, atta
     if (m.error) continue;
     msgs.push(m.role === "user" ? { role: "user", content: await userContent(m, used.vision && m === userMsg) } : { role: "assistant", content: m.content });
   }
-  const base = LITELLM;
-  const key = await litellmKey();
   let reply: ChatMessage;
   try {
-    const r = await fetch(`${base}/chat/completions`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json", ...(key ? { Authorization: `Bearer ${key}` } : {}) },
-      body: JSON.stringify({ model: used.id, messages: msgs, stream: false }),
-      signal: AbortSignal.timeout(600_000),
-    });
-    const j = (await r.json().catch(() => ({}))) as { choices?: { message?: { content?: string; reasoning_content?: string } }[]; error?: { message?: string } | string };
-    if (!r.ok) throw new Error(typeof j.error === "string" ? j.error : (j.error?.message ?? `HTTP ${r.status}`));
-    const content = (j.choices?.[0]?.message?.content ?? "").replace(/^<think>[\s\S]*?<\/think>\s*/, "").trim();
+    const content = await complete(used.id, msgs, onDelta);
     reply = { role: "assistant", content: content || "(empty answer)", at: new Date().toISOString(), model: used.id };
   } catch (e) {
     reply = { role: "assistant", content: `${used.id} did not answer: ${(e as Error).message.slice(0, 300)}`, at: new Date().toISOString(), model: used.id, error: true };

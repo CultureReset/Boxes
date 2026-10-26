@@ -1,3 +1,4 @@
+import { logTalk } from "../lib/chat";
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Loader2 } from "lucide-react";
 import { DOOR } from "../lib/door";
@@ -40,7 +41,7 @@ export function TalkNode() {
       const cfgP = post<{ session_id: string; secret: string; ws_url: string; session: unknown; max_seconds: number; filler_after: number; filler: string }>("/voice/session", {});
       const [stream, cfg] = await Promise.all([streamP, cfgP]);
       R.stream = stream; R.sid = cfg.session_id;
-      const log = (role: string, text: string) => { if (text) post("/voice/log", { session_id: cfg.session_id, role, text }).catch(() => {}); };
+      const log = (role: string, text: string) => { if (role === "user" || role === "assistant") logTalk(role, text); if (text) post("/voice/log", { session_id: cfg.session_id, role, text }).catch(() => {}); };
 
       // 2) straight to xAI with the ephemeral secret
       const ws = new WebSocket(cfg.ws_url, [`xai-client-secret.${cfg.secret}`]); R.ws = ws;

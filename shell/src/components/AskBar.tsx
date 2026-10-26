@@ -3,7 +3,7 @@ import { Sparkles, ArrowUp, Paperclip, ChevronUp, Mic, Square, Cpu, X, FileText,
 import { api, useApi } from "../api/client";
 import { useToast } from "../state/toast";
 import { AgentsPopover } from "./AgentsPopover";
-import type { AgentsInfo, Attachment, ChatModel, Job } from "../api/types";
+import type { AgentsInfo, Attachment, ChatModel } from "../api/types";
 import { AGENT, store, toBase64, uploadFile, type Outgoing } from "../lib/chat";
 
 /** Pick a recording format the browser can make: Chrome/Android webm, iPhone Safari mp4. */
@@ -26,7 +26,7 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
   onChat: (o: Outgoing) => void;
 }) {
   const [text, setText] = useState("");
-  const [busy, setBusy] = useState(false);
+  const [busy] = useState(false);
   const [open, setOpen] = useState(false);
   const [pickModel, setPickModel] = useState(false);
   const [rec, setRec] = useState<"idle" | "recording" | "hearing">("idle");
@@ -45,25 +45,12 @@ export function AskBar({ placeholder, personas, persona, onPersona, onJob, onlin
 
   const dispatch = async (prompt: string) => {
     if ((!prompt && !files.length) || busy || uploading) return;
-    if (chatMode || files.length) {
-      // Files only make sense in a chat; the agent path takes words.
-      const m = chatMode ? model : files.some((f) => f.kind === "image") ? "v4" : "fast";
-      if (!chatMode) onModel(m);
-      onChat({ text: prompt, model: m, attachments: files });
-      setText("");
-      setFiles([]);
-      return;
-    }
-    setBusy(true);
-    try {
-      const job = await api.post<Job>("/api/agents/ask", { prompt, persona });
-      setText("");
-      onJob(job.id);
-    } catch (err) {
-      toast(err instanceof Error ? err.message : "Could not reach NODE", "error");
-    } finally {
-      setBusy(false);
-    }
+    // The bar IS the chat: every ask (a model, or Agent = Ask NODE) lands in the chat panel above it.
+    const m = chatMode ? model : files.length ? (files.some((f) => f.kind === "image") ? "v4" : "fast") : AGENT;
+    if (!chatMode && files.length) onModel(m);
+    onChat({ text: prompt, model: m, attachments: files });
+    setText("");
+    setFiles([]);
   };
   const submit = (e: FormEvent) => {
     e.preventDefault();

@@ -2,7 +2,7 @@
  * - /api/* is NEVER intercepted or cached: it always goes over the network to the desktop.
  * - Navigations: served from cache instantly, refreshed in the background.
  * - Static assets (hashed /assets/*, icons, manifest): cache-first. */
-const CACHE = "node-shell-v4";
+const CACHE = "node-shell-v5";
 const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
