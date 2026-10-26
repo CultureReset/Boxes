@@ -49,6 +49,7 @@ async function swapTranscribe(wav: Buffer): Promise<string> {
   const form = new FormData();
   form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "in.wav");
   form.append("model", SWAP_ASR);
+  form.append("response_format", "json"); // LiteLLM -> asr-shim -> llama-swap only accepts json
   const r = await fetch(`${SWAP}/audio/transcriptions`, { method: "POST", body: form, headers: await gatewayHeaders(false), signal: AbortSignal.timeout(120_000) });
   if (!r.ok) return "";
   const j = (await r.json()) as { text?: string };
