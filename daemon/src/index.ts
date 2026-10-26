@@ -1,6 +1,7 @@
 import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
 import { startFrameProxies } from "./frameproxy.js";
+import { requireDoor } from "./doorauth.js";
 import http from "node:http";
 import path from "node:path";
 import { askPaperclip } from "./modules/paperclip.js";
@@ -372,9 +373,41 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
   }
 }
 
+
+// ---- Door sign-in (one login for NODE) ------------------------------------
+// The shell signs in through node-door (127.0.0.1:7700). /door/* is a plain
+// same-origin reverse-proxy route to it, so the door's session cookie is
+// first-party on this origin. Every /api/* call from a browser must carry a
+// valid door session; the daemon checks it with the door's own /me.
+// Local callers (healthcheck, the door's machine proxy) on this computer's own
+// addresses without X-Forwarded-For are trusted as before.
+const DOOR = process.env.NODEOS_DOOR ?? "http://127.0.0.1:7700";
+function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const u = new URL(DOOR);
+  const sub = (req.url ?? "/").replace(/^\/door/, "") || "/";
+  const headers: http.OutgoingHttpHeaders = {};
+  for (const k of ["content-type", "content-length", "accept", "cookie", "authorization", "user-agent"]) if (req.headers[k]) headers[k] = req.headers[k];
+  const xff = req.headers["x-forwarded-for"];
+  const peer = (req.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
+  headers["x-forwarded-for"] = xff ? `${xff}` : peer;
+  const up = http.request({ hostname: u.hostname, port: u.port, method: req.method, path: sub, headers }, (r) => {
+    const out: http.OutgoingHttpHeaders = { "Cache-Control": "no-store" };
+    for (const k of ["content-type", "content-length", "set-cookie"]) if (r.headers[k]) out[k] = r.headers[k];
+    res.writeHead(r.statusCode ?? 502, out);
+    r.pipe(res);
+  });
+  up.on("error", () => { if (!res.headersSent) sendJson(res, 502, { error: "door unreachable" }); else res.end(); });
+  req.pipe(up);
+}
+
 const server = http.createServer(async (req, res) => {
   // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.
   if (req.url?.startsWith("/api/bridge/")) return handleBridge(req, res);
+  // One login: remote devices (tailnet / Funnel) need a node-door session.
+  // The NODE door: same-origin route to node-door, open signed-out so the in-page login works.
+  if (req.url === "/door" || req.url?.startsWith("/door/")) return proxyDoor(req, res);
+  // One gate (doorauth.ts) for data. The static shell carries no data; signed out it shows the door login in-page.
+  if (req.url?.startsWith("/api/") && !(await requireDoor(req, res))) return;
   // Only ever talk to the local shell. A browser tab on another origin cannot
   // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
   const origin = req.headers.origin;

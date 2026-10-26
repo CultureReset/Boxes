@@ -2,9 +2,7 @@ import { api } from "../api/client";
 import type { AppEntry, WindowEntry } from "../api/types";
 import { NATIVE } from "../native/NativeApp";
 
-/** Apps whose own UI embeds fine and needs no separate login: shown at their own
- *  tailnet address (same site as NODE, so their cookies stay first-party). */
-const FRAME_OWN = new Set(["openjarvis", "paperclip", "searxng", "llama-swap"]);
+/** Every NODE app opens as a NODE-native screen (rebuilt in NODE, same backend via the door). */
 
 /** Everything opens INSIDE the NODE app: web apps in an in-app frame, desktop
  *  programs as a live view of their window. Never a new tab. */
@@ -27,7 +25,6 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
   // cookies are first-party (iOS Safari drops them inside cross-origin frames).
   const slug = a.id.replace(/^web:/, "");
   if (a.provider === "web" && NATIVE[slug]) return showAppView({ kind: "native", slug, title: a.name });
-  if (a.provider === "web" && FRAME_OWN.has(slug) && a.url) return showAppView({ kind: "web", url: slug === "llama-swap" ? a.url.replace(/\/?$/, "/ui/") : a.url, title: a.name });
   if (a.provider === "web" && a.openIn === "tab" && a.url) {
     if (!window.open(a.url, "_blank", "noopener")) window.location.href = a.url;
     return;

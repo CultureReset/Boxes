@@ -4,16 +4,9 @@ import { door } from "../lib/door";
 /** NODE-native screens for apps whose own UI can't be shown signed-in inside
  *  NODE (frame-blocking headers / their own login). Data comes from each app's
  *  API through the door (/door/app/<name>/...), credentials injected on the PC. */
-export const NATIVE: Record<string, { door: string; open?: string }> = {
-  "twenty-crm": { door: "twenty" },
-  navidrome: { door: "navidrome" },
-  "uptime-kuma": { door: "uptime-kuma" },
-  n8n: { door: "n8n" },
-  litellm: { door: "litellm" },
-  crawl4ai: { door: "crawl4ai" },
-  openclaw: { door: "" },
-  minidlna: { door: "minidlna" },
-};
+export const NATIVE: Record<string, true> = Object.fromEntries(
+  ["twenty-crm", "navidrome", "uptime-kuma", "n8n", "litellm", "crawl4ai", "openclaw", "minidlna", "openjarvis", "paperclip", "searxng", "llama-swap"].map((k) => [k, true]),
+) as Record<string, true>;
 
 function useLoad<T>(f: () => Promise<T>, dep: unknown) {
   const [s, set] = useState<{ d?: T; e?: string }>({});
@@ -90,10 +83,133 @@ function Kuma({ n }: { n: number }) {
 }
 
 function N8n({ n }: { n: number }) {
-  const s = useLoad(() => door.app<any>("n8n", "/api/v1/workflows?limit=100"), n);
-  if (s.e && /no n8n credentials/.test(s.e)) return <div style={box}><Msg>n8n isn't connected to NODE yet. A proposal to link it is on the PC (node-door PROPOSALS.md); nothing for you to do here.</Msg></div>;
-  return <div style={box}><Loaded s={s}>{(d) => <div>{(d?.data ?? []).map((w: any) => (
-    <div key={w.id} style={row}><span>{w.name}</span><span style={{ color: w.active ? "#30d158" : "#9aa4b2" }}>{w.active ? "Active" : "Off"}</span></div>))}</div>}</Loaded></div>;
+  const [tab, setTab] = useState<"workflows" | "executions">("workflows");
+  const [note, setNote] = useState("");
+  const s = useLoad(() => door.app<any>("n8n", `/n8n-ro/api/v1/${tab}?limit=100`), `${tab}${n}`);
+  const activate = async (w: any) => {
+    setNote("");
+    try {
+      const r = await door.post<any>("/app/approvals/v1/approvals", { action: { type: "n8n_activate", workflowId: String(w.id) }, requester: { app: "NODE", via: "door" }, reason: `Activate n8n workflow "${w.name}" from NODE` });
+      setNote(`Approval requested (${r.id}). It runs after you approve it on your phone.`);
+    } catch (e) { setNote("Couldn't request approval: " + (e as Error).message); }
+  };
+  return (
+    <div style={box}>
+      <Tabs tabs={["workflows", "executions"]} tab={tab} set={setTab} />
+      {note && <Msg>{note}</Msg>}
+      <Loaded s={s}>{(d) => {
+        const items: any[] = d?.data ?? [];
+        if (!items.length) return <Msg>No {tab} in n8n yet.</Msg>;
+        return <div>{items.map((x) => tab === "workflows" ? (
+          <div key={x.id} style={row}><span>{x.name}</span>
+            <span style={{ display: "flex", gap: 8, alignItems: "center" }}><span style={{ color: x.active ? "#30d158" : "#9aa4b2" }}>{x.active ? "Active" : "Off"}</span>
+              {!x.active && <button type="button" onClick={() => void activate(x)} style={btn}>Activate…</button>}</span></div>
+        ) : (
+          <div key={x.id} style={row}><span>#{x.id} · workflow {x.workflowId}</span><span style={{ color: x.status === "success" ? "#30d158" : "#9aa4b2" }}>{x.status ?? (x.finished ? "finished" : "running")} · {x.startedAt?.slice(0, 16).replace("T", " ")}</span></div>
+        ))}</div>;
+      }}</Loaded>
+    </div>
+  );
+}
+
+const btn: React.CSSProperties = { padding: "4px 10px", borderRadius: 12, border: 0, background: "#0a84ff", color: "#fff" };
+function Tabs<T extends string>({ tabs, tab, set }: { tabs: T[]; tab: T; set: (t: T) => void }) {
+  return <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>{tabs.map((t) => (
+    <button key={t} type="button" onClick={() => set(t)} style={{ padding: "6px 12px", borderRadius: 16, border: 0, background: t === tab ? "#0a84ff" : "#1d2532", color: "#fff", textTransform: "capitalize" }}>{t}</button>))}</div>;
+}
+
+function OpenClaw({ n }: { n: number }) {
+  const [key, setKey] = useState<string | null>(null);
+  const call = (tool: string, args: object) => door.post<any>("/app/openclaw/tools/invoke", { tool, args }).then((r) => JSON.parse(r?.result?.content?.[0]?.text ?? "{}"));
+  const s = useLoad(() => (key ? call("sessions_history", { sessionKey: key, limit: 50 }) : call("sessions_list", { limit: 50 })), `${key}${n}`);
+  const text = (c: any): string => typeof c === "string" ? c : Array.isArray(c) ? c.map((p) => p.type === "text" ? p.text : p.type === "toolCall" ? `[${p.name}]` : "").filter(Boolean).join("\n") : "";
+  return (
+    <div style={box}>
+      {key && <button type="button" onClick={() => setKey(null)} style={{ marginBottom: 8, background: "none", border: 0, color: "#0a84ff" }}>‹ All conversations</button>}
+      <Loaded s={s}>{(d) => key ? (
+        <div style={{ display: "grid", gap: 8 }}>{(d.messages ?? []).map((m: any, i: number) => {
+          const t = text(m.content); if (!t) return null;
+          const me = m.role === "user";
+          return <div key={i} style={{ justifySelf: me ? "end" : "start", maxWidth: "85%", background: me ? "#0a84ff" : "#1d2532", padding: "8px 12px", borderRadius: 14, whiteSpace: "pre-wrap", wordBreak: "break-word" }}>{t}</div>;
+        })}<Msg>Sending to OpenClaw from NODE needs an approval-gateway action (proposal filed); use NODE's chat meanwhile.</Msg></div>
+      ) : (
+        <div>{(d.sessions ?? []).map((x: any) => (
+          <button type="button" key={x.key} onClick={() => setKey(x.key)} style={{ ...row, width: "100%", background: "none", color: "inherit", border: 0, borderBottom: "1px solid #1d2532", textAlign: "left" }}>
+            <span>{x.label ?? x.displayName}</span><span style={{ color: "#9aa4b2" }}>{x.kind} · {x.updatedAt ? new Date(x.updatedAt).toLocaleString() : ""}</span></button>))}</div>
+      )}</Loaded>
+    </div>
+  );
+}
+
+function OpenJarvis({ n }: { n: number }) {
+  const [tab, setTab] = useState<"overview" | "agents" | "models" | "approvals" | "skills">("overview");
+  const path = { overview: "/v1/info", agents: "/v1/agents", models: "/v1/models", approvals: "/v1/approvals/pending", skills: "/v1/skills" }[tab];
+  const s = useLoad(() => door.app<any>("openjarvis", path), `${tab}${n}`);
+  return (
+    <div style={box}>
+      <Tabs tabs={["overview", "agents", "models", "approvals", "skills"]} tab={tab} set={setTab} />
+      <Loaded s={s}>{(d) => {
+        const list: any[] = tab === "agents" ? d.registered ?? [] : tab === "models" ? d.data ?? [] : tab === "approvals" ? d.actions ?? [] : tab === "skills" ? (Array.isArray(d) ? d : d.skills ?? []) : [];
+        if (tab === "overview") return <div>{Object.entries(d ?? {}).map(([k, v]) => <div key={k} style={row}><span>{k}</span><span style={{ color: "#9aa4b2" }}>{String(v)}</span></div>)}</div>;
+        if (!list.length) return <Msg>Nothing here.</Msg>;
+        return <div>{list.map((x, i) => <div key={i} style={row}><span>{x.key ?? x.id ?? x.name ?? JSON.stringify(x).slice(0, 60)}</span><span style={{ color: "#9aa4b2" }}>{x.class ?? x.owned_by ?? x.description ?? x.status ?? ""}</span></div>)}</div>;
+      }}</Loaded>
+    </div>
+  );
+}
+
+function Paperclip({ n }: { n: number }) {
+  const [tab, setTab] = useState<"issues" | "agents">("issues");
+  const co = useLoad(() => door.app<any[]>("paperclip", "/api/companies"), n);
+  const cid = co.d?.[0]?.id as string | undefined;
+  const s = useLoad(() => (cid ? door.app<any[]>("paperclip", `/api/companies/${cid}/${tab}`) : new Promise<any[]>(() => {})), `${cid}${tab}${n}`);
+  return (
+    <div style={box}>
+      <div style={{ color: "#9aa4b2", marginBottom: 8 }}>{co.d?.[0]?.name ?? ""}</div>
+      <Tabs tabs={["issues", "agents"]} tab={tab} set={setTab} />
+      <Loaded s={co.e ? co : s}>{(d: any) => {
+        const items: any[] = Array.isArray(d) ? d : [];
+        if (!items.length) return <Msg>No {tab}.</Msg>;
+        return <div>{items.map((x) => tab === "issues" ? (
+          <div key={x.id} style={row}><span>{x.identifier} {x.title}</span><span style={{ color: x.status === "done" ? "#30d158" : "#ff9f0a" }}>{x.status}</span></div>
+        ) : (
+          <div key={x.id} style={row}><span>{x.name}</span><span style={{ color: "#9aa4b2" }}>{x.role} · {x.status}</span></div>
+        ))}</div>;
+      }}</Loaded>
+    </div>
+  );
+}
+
+function Searx() {
+  const [q, setQ] = useState("");
+  const [run, setRun] = useState("");
+  const s = useLoad(() => (run ? door.app<any>("searxng", `/search?format=json&q=${encodeURIComponent(run)}`) : Promise.resolve({ results: [] })), run);
+  return (
+    <div style={box}>
+      <form onSubmit={(e) => { e.preventDefault(); setRun(q.trim()); }} style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search privately" aria-label="Search" style={{ flex: 1, padding: "10px 12px", borderRadius: 12, border: "1px solid #2a3442", background: "#111722", color: "#e6e9ef", fontSize: 16 }} />
+        <button style={btn}>Search</button>
+      </form>
+      <Loaded s={s}>{(d) => <div>{(d.results ?? []).map((r: any, i: number) => (
+        <a key={i} href={r.url} target="_blank" rel="noopener noreferrer" style={{ display: "block", padding: "10px 4px", borderBottom: "1px solid #1d2532", color: "inherit", textDecoration: "none" }}>
+          <div style={{ color: "#64d2ff" }}>{r.title}</div><div style={{ color: "#9aa4b2", fontSize: 13 }}>{r.url}</div><div style={{ fontSize: 14 }}>{r.content}</div></a>))}</div>}</Loaded>
+    </div>
+  );
+}
+
+function LlamaSwap({ n }: { n: number }) {
+  const m = useLoad(() => door.app<any>("llama-swap", "/v1/models"), n);
+  const r = useLoad(() => door.app<any>("llama-swap", "/running"), n);
+  const running = new Set<string>((r.d?.running ?? []).map((x: any) => x.model ?? x.name));
+  return <div style={box}><Loaded s={m}>{(d) => <div>{(d.data ?? []).map((x: any) => (
+    <div key={x.id} style={row}><span>{x.id}</span><span style={{ color: running.has(x.id) ? "#30d158" : "#9aa4b2" }}>{running.has(x.id) ? "loaded" : x.status?.value ?? "unloaded"}</span></div>))}</div>}</Loaded></div>;
+}
+
+function MiniDlna({ n }: { n: number }) {
+  const s = useLoad(() => door.appText("minidlna", "/").then((t) => ({ up: true, t })).catch(() => ({ up: false, t: "" })), n);
+  return <div style={box}><Loaded s={s}>{(d) => d.up
+    ? <div>{d.t.replace(/<[^>]+>/g, "\n").split("\n").map((l) => l.trim()).filter(Boolean).map((l, i) => <div key={i} style={row}>{l}</div>)}</div>
+    : <div style={row}><span><span style={{ color: "#ff453a" }}>●</span> MiniDLNA</span><span style={{ color: "#9aa4b2" }}>Stopped</span></div>}</Loaded></div>;
 }
 
 function Health({ name, paths, n }: { name: string; paths: string[]; n: number }) {
@@ -111,8 +227,12 @@ export function NativeApp({ slug, n }: { slug: string; n: number }) {
     case "n8n": return <N8n n={n} />;
     case "litellm": return <Health name="litellm" paths={["/health/readiness", "/health/liveliness"]} n={n} />;
     case "crawl4ai": return <Health name="crawl4ai" paths={["/health"]} n={n} />;
-    case "minidlna": return <Health name="minidlna" paths={["/"]} n={n} />;
-    case "openclaw": return <div style={box}><Msg>OpenClaw's control UI refuses to be shown inside other pages and has no read API the door can use yet. A proposal is on the PC (node-door PROPOSALS.md); until then use it from Paperclip, which is shown here.</Msg></div>;
+    case "minidlna": return <MiniDlna n={n} />;
+    case "openjarvis": return <OpenJarvis n={n} />;
+    case "paperclip": return <Paperclip n={n} />;
+    case "searxng": return <Searx />;
+    case "llama-swap": return <LlamaSwap n={n} />;
+    case "openclaw": return <OpenClaw n={n} />;
     default: return <Msg>No NODE view for {slug}.</Msg>;
   }
 }
