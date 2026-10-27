@@ -150,7 +150,7 @@ function Shell() {
           <Screen sub={route.sub} params={route.params} onJob={setJob} />
         </div>
       </main>
-      {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
+      {(showAsk || chatOpen) && <AskBar placeholder={mod.ask ?? "Message…"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
       {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} onJob={setJob} />}
       <TabBar active={screen} />
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
