@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from "react";
-import { X, Plus, History, FileText, Trash2, Send, Copy, Volume2, Maximize2, Minimize2, Pencil, Search } from "lucide-react";
+import { X, Plus, History, FileText, Trash2, Send, Copy, Volume2, Maximize2, Minimize2, Pencil, Search, Phone } from "lucide-react";
 import type { Job } from "../api/types";
 import { api } from "../api/client";
 import type { Chat, ChatMessage, ChatSummary } from "../api/types";
@@ -83,6 +83,7 @@ export function ChatPanel({ chatId, outgoing, onChatId, onModel, onClose, onJob 
         <div className="grow t" onDoubleClick={() => chat && rename(chat.id, chat.title)}>{showList ? "Chats" : (chat?.title ?? (pending.length ? pending[0].content.slice(0, 40) || "New chat" : "New chat"))}</div>
         {chat?.id && !showList && <button type="button" className="icon-btn" aria-label="Rename chat" onClick={() => rename(chat.id, chat.title)}><Pencil size={16} /></button>}
         <button type="button" className={`icon-btn${speak ? " on" : ""}`} aria-label="Read replies aloud" aria-pressed={speak} title="Read replies aloud" onClick={() => setSpeak((s) => !s)}><Volume2 size={17} /></button>
+        <a className="icon-btn" href="/door/pccall/" aria-label="Call my computer (talk to the PC's voice mode)" title="Call my computer: your phone mic becomes the PC microphone, the PC speaker plays here"><Phone size={17} /></a>
         {chat?.id && !showList && onJob && (
           <button type="button" className="icon-btn" aria-label="Send to Paperclip" title="Send this chat to Paperclip as a task for Lead"
             onClick={() => void api.post<Job>(`/api/chats/${chat.id}/paperclip`, {}).then((j) => { onJob(j.id); toast("Sent to Paperclip (Lead)"); }).catch((e) => toast(e instanceof Error ? e.message : "Paperclip failed", "error"))}>
