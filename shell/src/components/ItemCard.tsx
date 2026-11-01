@@ -3,7 +3,7 @@ import { ChevronRight } from "lucide-react";
 import { MoreButton } from "./ui";
 
 /** The 300px card used in every horizontal row: icon, title, subtitle, meta, chevron. */
-export function ItemCard({ icon, title, subtitle, meta, badge, onClick, onMore, chevron, wide, action, children }: { icon: ReactNode; title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; badge?: ReactNode; onClick?: () => void; onMore?: (e: React.MouseEvent<HTMLButtonElement>) => void; chevron?: boolean; wide?: boolean; action?: ReactNode; children?: ReactNode }) {
+export function ItemCard({ icon, title, subtitle, meta, badge, onClick, onMore, chevron, wide, action, children }: { icon: ReactNode; title: ReactNode; subtitle?: ReactNode; meta?: ReactNode; badge?: ReactNode; onClick?: (e: React.MouseEvent<HTMLElement>) => void; onMore?: (e: React.MouseEvent<HTMLButtonElement>) => void; chevron?: boolean; wide?: boolean; action?: ReactNode; children?: ReactNode }) {
   const Tag = onClick ? "button" : "div";
   return (
     <Tag type={onClick ? "button" : undefined} className={`card item${wide ? " wide" : ""}`} onClick={onClick}>

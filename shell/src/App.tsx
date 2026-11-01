@@ -1,3 +1,6 @@
+import { AppView } from "./components/AppView";
+import { DoorGate } from "./components/DoorGate";
+import { door } from "./lib/door";
 import { useEffect, useState } from "react";
 import { LogOut, Lock, Moon, Power, RefreshCw, Settings as SettingsIcon, Users } from "lucide-react";
 import { useRoute, navigate } from "./lib/router";
@@ -12,6 +15,8 @@ import { AskBar } from "./components/AskBar";
 import { SearchOverlay } from "./components/SearchOverlay";
 import { NotificationsPanel } from "./components/NotificationsPanel";
 import { JobPanel } from "./components/JobPanel";
+import { ChatPanel } from "./components/ChatPanel";
+import { store, AGENT, type Outgoing } from "./lib/chat";
 import { Sheet } from "./components/Sheet";
 import { useMenu } from "./components/Menu";
 import { screen as screenModule } from "./modules/registry";
@@ -22,6 +27,13 @@ import { initSpatialNavigation, focusFirst } from "./lib/spatial";
 function Shell() {
   const route = useRoute();
   const online = useConnected();
+  const [offline, setOffline] = useState(false);
+  useEffect(() => {
+    if (online) { setOffline(false); return; }
+    // Give the first connection a moment before calling the desktop offline.
+    const t = setTimeout(() => setOffline(true), 4000);
+    return () => clearTimeout(t);
+  }, [online]);
   const { layout } = useLayout();
   const { worlds, active: world, switchTo } = useWorld();
   const toast = useToast();
@@ -31,6 +43,18 @@ function Shell() {
   const [job, setJob] = useState<string | null>(null);
   const [power, setPower] = useState(false);
   const [persona, setPersona] = useState("auto");
+  const [model, setModelState] = useState(store.model);
+  const setModel = (m: string) => { store.model = m; setModelState(m); };
+  const [chatId, setChatIdState] = useState<string | null>(store.chat);
+  const setChatId = (id: string | null) => { store.chat = id; setChatIdState(id); };
+  const [chatOpen, setChatOpen] = useState(false);
+  const [outgoing, setOutgoing] = useState<(Outgoing & { n: number }) | null>(null);
+  const onChat = (o: Outgoing) => { setOutgoing((p) => ({ ...o, n: (p?.n ?? 0) + 1 })); setChatOpen(true); };
+  const pickModel = (m: string) => {
+    setModel(m);
+    if (m !== AGENT) setChatOpen(true);
+    if (m !== AGENT && chatId) void api.post(`/api/chats/${chatId}/model`, { model: m }).catch(() => {});
+  };
   const { data: agents } = useApi<AgentsInfo>("/api/agents", ["world"]);
   const { data: notifList } = useApi<Notification[]>("/api/notifications", ["notification", "notifications"]);
   const unread = (notifList ?? []).filter((n) => !n.read).length;
@@ -116,15 +140,22 @@ function Shell() {
     <div className="frame">
       <TopBar active={screen} onSearch={() => setSearch(true)} onNotifications={() => setNotifs(true)} unread={unread} onUser={userMenu} />
       <DemoBanner />
+      {offline && (
+        <div role="alert" className="desktop-offline" style={{ background: "#5a1d1d", color: "#ffd9d9", padding: "8px 14px", textAlign: "center", fontSize: 14 }}>
+          Desktop offline — can't reach NODE on your desktop over Tailscale. Showing the saved app; nothing will run until it's back.
+        </div>
+      )}
       <main className={`main${showAsk ? "" : " no-ask"}`} key={`${screen}:${world?.id ?? ""}`}>
         <div className="fade-in">
           <Screen sub={route.sub} params={route.params} onJob={setJob} />
         </div>
       </main>
-      {showAsk && <AskBar placeholder={mod.ask ?? "What do you need?"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} />}
+      {(showAsk || chatOpen) && <AskBar placeholder={mod.ask ?? "Message…"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
+      {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} onJob={setJob} />}
       <TabBar active={screen} />
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {notifs && <NotificationsPanel onClose={() => setNotifs(false)} />}
+      <AppView />
       {job && <JobPanel jobId={job} onClose={() => setJob(null)} />}
       {power && (
         <Sheet title="Power" icon={<Power size={18} />} onClose={() => setPower(false)} size="narrow">
@@ -138,6 +169,10 @@ function Shell() {
                 <span className="t grow">{l}</span>
               </button>
             ))}
+            <button type="button" className="list-row" onClick={() => void door.logout().then(() => location.reload())}>
+              <span className="ic" style={{ ["--ic" as string]: "#8e8e93" }}><Power size={18} /></span>
+              <span className="t grow">Sign out of NODE</span>
+            </button>
           </div>
         </Sheet>
       )}
@@ -152,7 +187,7 @@ export default function App() {
       <WorldProvider>
         <LayoutProvider>
           <ToastProvider>
-            <Shell />
+            <DoorGate><Shell /></DoorGate>
           </ToastProvider>
         </LayoutProvider>
       </WorldProvider>

@@ -22,6 +22,7 @@ export const DEFAULT_ROWS: HomeRow[] = [
   { id: "today", enabled: false },
   { id: "recent-files", enabled: false },
   { id: "automations", enabled: true },
+  { id: "services", enabled: true },
 ];
 
 export interface Layout {

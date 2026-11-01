@@ -26,7 +26,7 @@ export function JobPanel({ jobId, onClose, title }: { jobId: string; onClose: ()
         {job?.status === "running" && <span className="spinner" />}
         {job?.status === "done" && <CheckCircle2 size={16} color="var(--green)" />}
         {job?.status === "failed" && <XCircle size={16} color="var(--red)" />}
-        <span className="dim small">{job?.status === "running" ? (isAgent ? "Thinking…" : "Working…") : job?.status === "done" ? "Done" : job?.status === "failed" ? "Something went wrong" : ""}</span>
+        <span className="dim small">{job?.status === "running" ? (job?.meta?.via === "paperclip" ? `Working in Paperclip…${job.meta.issue ? " " + String(job.meta.issue) : ""}` : isAgent ? "Thinking…" : "Working…") : job?.status === "done" ? "Done" : job?.status === "failed" ? "Something went wrong" : ""}</span>
       </div>
       <div ref={outRef} className={`job-out${isAgent ? " plain" : " mono"}`}>
         {text || (job?.status === "running" ? " " : "No output.")}

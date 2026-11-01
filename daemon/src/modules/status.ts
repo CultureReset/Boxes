@@ -65,34 +65,10 @@ export async function capabilities(): Promise<Record<string, boolean>> {
 }
 
 let demoCache: boolean | null = null;
-/**
- * Demo mode means no graphical session at all: use canned data.
- *
- * This used to test for `hyprctl` alone, which meant any box not running
- * Hyprland was stuck showing sample data forever — including boxes running
- * the X11 session this repo actually ships. box/image/.../cybercheck-session.sh
- * chooses X11 + openbox deliberately, and writes down why: Wayland has no
- * sanctioned way for one process to synthesise input into another's window.
- * So Hyprland cannot be the test for "is there a desktop here".
- *
- * Any of these means a real session, and real data:
- *   - hyprctl present        (Hyprland)
- *   - DISPLAY set            (X11 — the shipped session, and most desktops)
- *   - WAYLAND_DISPLAY set    (some other Wayland compositor)
- *
- * NODEOS_DEMO=1 still forces demo mode on, for showing the box off on a
- * machine that isn't one.
- */
+/** Demo mode means no compositor and no session tools: use canned data. */
 export async function isDemo(): Promise<boolean> {
   if (demoCache !== null) return demoCache;
-  if (process.env.NODEOS_DEMO === "1") return (demoCache = true);
-
-  const session =
-    !!process.env.DISPLAY ||
-    !!process.env.WAYLAND_DISPLAY ||
-    (await has("hyprctl"));
-
-  demoCache = !session;
+  demoCache = process.env.NODEOS_DEMO === "1" || process.env.NODEOS_DEMO !== "0" && !(await has("hyprctl")) && !(await has("wmctrl")) && !(await has("xdotool")) && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
   return demoCache;
 }
 

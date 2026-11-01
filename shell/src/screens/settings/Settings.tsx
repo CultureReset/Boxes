@@ -41,6 +41,10 @@ export function Settings({ panel, onJob }: { panel?: string; onJob: (id: string)
   return (
     <>
       <Hero title="Settings" subtitle="Simple controls for everything under the hood." tagline={status?.demo ? "Demo mode" : "A more capable you."} />
+      {/* Sign-in card: type a username/password/2FA code here; NODE types it into the PC Call Chrome (node-pccall). Nothing is stored. */}
+      <a href="/door/pccall/signin" className="card" style={{ display: "flex", alignItems: "center", gap: 10, padding: "14px 16px", marginBottom: 12, textDecoration: "none", color: "inherit", border: "1px solid var(--line)", borderRadius: "var(--r-md)" }}>
+        <span style={{ fontSize: 20 }}>🔑</span><span className="stack grow"><span className="t">Sign in to a website on my PC</span><span className="s dim small">Gemini / Google and more. Type it here, NODE fills it in on the PC.</span></span><ChevronRight size={16} />
+      </a>
       <div style={{ display: "grid", gridTemplateColumns: active ? "minmax(220px, 300px) minmax(0, 1fr)" : "minmax(0, 1fr)", gap: 20, alignItems: "start" }} className="settings-layout">
         <div className={`list${active ? " settings-nav" : ""}`} style={!active ? { display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", background: "transparent", border: 0, gap: 12, overflow: "visible" } : undefined}>
           {SETTINGS_INDEX.map((s) => {

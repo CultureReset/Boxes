@@ -60,7 +60,7 @@ export class Router {
       const params: Record<string, string> = {};
       route.keys.forEach((k, i) => (params[k] = decodeURIComponent(m[i + 1] ?? "")));
       try {
-        const body = req.method === "POST" ? await readJson(req) : undefined;
+        const body = req.method === "POST" ? await readJson(req, BIG_BODY.test(url.pathname) ? 40 * 1024 * 1024 : 1024 * 1024) : undefined;
         const out = await route.handler({ req, res, params, query: url.searchParams, body });
         if (res.writableEnded || res.headersSent) return true; // handler streamed its own response
         sendJson(res, 200, out ?? { ok: true });
@@ -86,7 +86,10 @@ export function sendJson(res: ServerResponse, status: number, data: unknown) {
   res.end(payload);
 }
 
-async function readJson(req: IncomingMessage): Promise<unknown> {
+/** Uploads and recordings arrive base64 in JSON; everything else stays at 1 MB. */
+const BIG_BODY = /^\/api\/(chat\/upload|voice\/(heard|transcribe))$/;
+
+async function readJson(req: IncomingMessage, max = 1024 * 1024): Promise<unknown> {
   const type = req.headers["content-type"] ?? "";
   // Requiring a JSON content type forces a CORS preflight for any cross-origin
   // page, and we never answer preflights, so browsers on other origins are shut out.
@@ -95,7 +98,7 @@ async function readJson(req: IncomingMessage): Promise<unknown> {
   let size = 0;
   for await (const chunk of req) {
     size += (chunk as Buffer).length;
-    if (size > 1024 * 1024) throw new HttpError(413, "Body too large");
+    if (size > max) throw new HttpError(413, "Body too large");
     chunks.push(chunk as Buffer);
   }
   const text = Buffer.concat(chunks).toString("utf8");

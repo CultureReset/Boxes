@@ -1,0 +1,129 @@
+[
+  {
+    "slug": "openjarvis",
+    "name": "OpenJarvis",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net/",
+    "comment": "AI assistant UI",
+    "color": "#0a84ff",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/openjarvis.png",
+    "open": "frame"
+  },
+  {
+    "slug": "twenty-crm",
+    "name": "Twenty CRM",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:6443/",
+    "comment": "CRM",
+    "color": "#5e5ce6",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/twenty-crm.png",
+    "open": "frame"
+  },
+  {
+    "slug": "paperclip",
+    "includes": [
+      "OpenClaw",
+      "Hermes"
+    ],
+    "name": "Paperclip",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10443/",
+    "comment": "Agent company",
+    "color": "#ff9f0a",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/paperclip.png",
+    "open": "frame"
+  },
+  {
+    "slug": "n8n",
+    "name": "n8n",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:5443/",
+    "comment": "Workflow automation",
+    "color": "#ff375f",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/n8n.png",
+    "open": "frame"
+  },
+  {
+    "slug": "litellm",
+    "name": "LiteLLM",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:3443/ui/",
+    "comment": "LLM proxy admin",
+    "color": "#30d158",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/litellm.png",
+    "open": "frame"
+  },
+  {
+    "slug": "searxng",
+    "name": "SearXNG",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:9443/",
+    "comment": "Private search",
+    "color": "#64d2ff",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/searxng.png"
+  },
+  {
+    "slug": "openclaw",
+    "parent": "paperclip",
+    "name": "OpenClaw",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:11443/",
+    "comment": "Agent gateway control UI",
+    "color": "#ff453a",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/openclaw.png",
+    "open": "frame"
+  },
+  {
+    "slug": "uptime-kuma",
+    "name": "Uptime Kuma",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:7443/",
+    "comment": "Service monitor",
+    "color": "#30d158",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/uptime-kuma.png",
+    "open": "frame"
+  },
+  {
+    "slug": "navidrome",
+    "name": "Navidrome",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:4443/",
+    "comment": "Music",
+    "color": "#bf5af2",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/navidrome.png",
+    "open": "frame"
+  },
+  {
+    "slug": "crawl4ai",
+    "name": "Crawl4AI",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/playground",
+    "comment": "Web crawler playground",
+    "color": "#ac8e68",
+    "category": "This Computer"
+  },
+  {
+    "slug": "llama-swap",
+    "name": "llama-swap",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:13443/",
+    "comment": "Local LLM models",
+    "color": "#ffd60a",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/llama-swap.png"
+  },
+  {
+    "slug": "minidlna",
+    "name": "MiniDLNA",
+    "url": "http://100.104.20.101:8200/",
+    "comment": "Media server status",
+    "color": "#64d2ff",
+    "category": "This Computer"
+  },
+  {
+    "slug": "mcp",
+    "name": "MCP",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10000/mcp",
+    "comment": "Connect AI clients to NODE",
+    "color": "#8e8e93",
+    "category": "This Computer"
+  }
+]

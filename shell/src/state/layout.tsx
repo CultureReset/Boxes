@@ -13,7 +13,17 @@ const LayoutCtx = createContext<Ctx>({ layout: null, tv: false, save: async () =
 
 export function LayoutProvider({ children }: { children: ReactNode }) {
   const [layout, setLayout] = useState<Layout | null>(null);
-  const tv = layout?.tv ?? detectTv();
+  // The saved TV choice is for the big screen. A phone-width window is never a
+  // TV: TV mode hides the bottom tab bar, which left phones with no way to
+  // reach Apps, Agents, Files or Settings.
+  const [narrow, setNarrow] = useState(() => window.matchMedia("(max-width: 840px)").matches);
+  useEffect(() => {
+    const mq = window.matchMedia("(max-width: 840px)");
+    const on = () => setNarrow(mq.matches);
+    mq.addEventListener("change", on);
+    return () => mq.removeEventListener("change", on);
+  }, []);
+  const tv = !narrow && (layout?.tv ?? detectTv());
   useEffect(() => {
     void api.get<Layout>("/api/layout").then(setLayout).catch(() => setLayout({ rows: [], look: "dashboard", tv: null, scale: 1, weatherLocation: "" }));
   }, []);

@@ -14,6 +14,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     headers: body !== undefined ? { "Content-Type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
   });
+  markReachable();
   const text = await res.text();
   let data: unknown = null;
   try {
@@ -22,6 +23,7 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
     data = text;
   }
   if (!res.ok) {
+    if (res.status === 401) window.dispatchEvent(new Event("node:signed-out"));
     const msg = (data as { error?: string } | null)?.error ?? res.statusText;
     throw new ApiError(res.status, msg);
   }
@@ -86,16 +88,45 @@ export function useEvent<T = unknown>(type: string, fn: (data: T) => void) {
   useEffect(() => subscribe(type, (d) => ref.current(d as T)), [type]);
 }
 
+/* Reachability: the event stream can drop on mobile networks (iOS/5G/Funnel) even
+ * while the door answers fine. "Offline" means the door's own public origin (same
+ * origin, /health) truly can't be reached, not merely that the stream blipped. */
+let lastReach = 0;
+function markReachable() { lastReach = Date.now(); }
+async function probeDoor(): Promise<boolean> {
+  const ctl = new AbortController();
+  const t = setTimeout(() => ctl.abort(), 8000);
+  try {
+    const r = await fetch(BASE + "/health", { cache: "no-store", signal: ctl.signal });
+    if (r.status < 500) markReachable();
+    return r.status < 500;
+  } catch { return false; } finally { clearTimeout(t); }
+}
+
 export function useConnected(): boolean {
-  const [ok, setOk] = useState(connected);
+  const [sse, setSse] = useState(connected);
+  const [reach, setReach] = useState(true);
   useEffect(() => {
     ensureSource();
-    connListeners.add(setOk);
+    connListeners.add(setSse);
     return () => {
-      connListeners.delete(setOk);
+      connListeners.delete(setSse);
     };
   }, []);
-  return ok;
+  useEffect(() => {
+    if (sse) { setReach(true); return; }
+    let alive = true, fails = 0;
+    const tick = async () => {
+      if (Date.now() - lastReach < 15000) { fails = 0; if (alive) setReach(true); return; }
+      const ok = await probeDoor();
+      fails = ok ? 0 : fails + 1;
+      if (alive) setReach(fails < 2);   // two failed probes in a row = really offline
+    };
+    tick();
+    const id = setInterval(tick, 5000);
+    return () => { alive = false; clearInterval(id); };
+  }, [sse]);
+  return sse || reach;
 }
 
 /**
