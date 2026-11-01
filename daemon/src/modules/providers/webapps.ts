@@ -1,3 +1,7 @@
+import { frames } from "../../frameproxy.js";
+import { existsSync, readFileSync } from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { has, launchDetached } from "../../exec.js";
 import { WorldStore } from "../worlds.js";
 import { catalogEntries } from "../catalog.js";
@@ -16,24 +20,37 @@ import { qualify, type AppProvider } from "./types.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
+  open?: "tab" | "frame";
   slug: string;
+  parent?: string;
+  includes?: string[];
   name: string;
   url: string;
   comment: string;
   color: string;
   category: string;
+  icon?: string;
   added: boolean;
 }
 
 /** Only what you actually added. The catalog is a separate, read-only menu. */
 const store = new WorldStore<WebApp[]>("webapps", () => []);
 
+/** Per-app "open" from config/webapps.json (saved apps are copies, so read it live). */
+function openModeFromConfig(slug: string): string | undefined {
+  try {
+    const p = WEBAPPS_FILE;
+    const list = JSON.parse(readFileSync(p, "utf8")) as { slug: string; open?: string }[];
+    return list.find((x) => x.slug === slug)?.open;
+  } catch { return undefined; }
+}
+
 function windowClass(slug: string): string {
   return `nodeos-web-${slug}`;
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: "", categories: [w.category], source: "webapp", color: w.color, url: w.url };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**
@@ -114,3 +131,20 @@ export const webProvider: AppProvider = {
     return m?.[1];
   },
 };
+
+function frameUrlFor(slug: string, url: string): string | undefined {
+  const f = frames().find((x) => x.slug === slug);
+  if (!f) return undefined;
+  const u = new URL(url);
+  return `https://${u.hostname}:${f.servePort}${f.path}`;
+}
+
+/** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
+ *  before it existed pick it up too. OpenClaw lives under Paperclip. */
+const WEBAPPS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../../config/webapps.json");
+function grouping(slug: string): { parent?: string; includes?: string[] } {
+  try {
+    const w = (JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as WebApp[]).find((x) => x.slug === slug);
+    return { parent: w?.parent, includes: w?.includes };
+  } catch { return {}; }
+}

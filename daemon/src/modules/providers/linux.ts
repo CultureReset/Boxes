@@ -39,6 +39,7 @@ async function parseDesktop(file: string): Promise<Record<string, string> | null
   }
   const entry: Record<string, string> = {};
   let inMain = false;
+  // Same literal-newline-instead-of-"\n" break as windows.ts had.
   for (const raw of text.split("\n")) {
     const line = raw.trim();
     if (line.startsWith("[")) {

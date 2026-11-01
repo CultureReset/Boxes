@@ -13,6 +13,11 @@ export interface AppEntry {
   color?: string;
   desktopFile?: string;
   url?: string;
+  frameUrl?: string;
+  /** "tab": open top-level (apps with logins or that block framing). */
+  openIn?: "tab";
+  parent?: string;
+  includes?: string[];
   package?: string;
 }
 
@@ -138,7 +143,7 @@ export interface Package {
   description: string;
   repo: string;
   installed: boolean;
-  source: "flathub" | "pacman" | "apt";
+  source: "flathub" | "pacman";
   appId?: string;
   icon?: string;
 }
@@ -276,3 +281,66 @@ export interface Weather {
   summary: string;
   demo: boolean;
 }
+
+export interface ServiceEntry {
+  kind: "systemd" | "docker";
+  name: string;
+  description: string;
+  state: string;
+  running: boolean;
+}
+
+export interface PortEntry {
+  port: number;
+  address: string;
+  process: string;
+  url: string | null;
+}
+
+export interface HealthCheck {
+  name: string;
+  ok: boolean;
+  detail: string;
+}
+
+export interface HealthReport {
+  checkedAt: string | null;
+  ok: boolean;
+  stale: boolean;
+  failures: number;
+  checks: HealthCheck[];
+}
+
+export interface ServicesReport {
+  services: ServiceEntry[];
+  ports: PortEntry[];
+  health?: HealthReport;
+}
+
+export interface ControlUnitState {
+  unit: string;
+  running: boolean;
+  state: string;
+}
+
+export interface ControlStatus {
+  id: string;
+  name: string;
+  tier: "core" | "on-demand";
+  kind: "systemd" | "docker";
+  units: string[];
+  url: string | null;
+  why: string;
+  self?: boolean;
+  parent?: string;
+  includes?: { name: string; why: string }[];
+  status: "running" | "partial" | "stopped";
+  unitStates: ControlUnitState[];
+}
+
+/* ---------- Chat with a chosen model ---------- */
+export interface ChatModel { id: string; via: "litellm"; cloud: boolean; label: string; vision: boolean }
+export interface Attachment { id: string; name: string; type: string; size: number; kind: "image" | "pdf" | "text" | "other"; chars: number }
+export interface ChatMessage { role: "user" | "assistant"; content: string; at: string; model?: string; attachments?: Attachment[]; error?: boolean; pending?: boolean }
+export interface Chat { id: string; title: string; model: string; createdAt: string; updatedAt: string; messages: ChatMessage[] }
+export interface ChatSummary { id: string; title: string; model: string; createdAt: string; updatedAt: string; count: number }

@@ -1,6 +1,5 @@
 import { has, run, stream } from "../exec.js";
 import { isDemo } from "./status.js";
-import { detect as detectPkg } from "./providers/pkgmgr.js";
 import { check, type FeatureStatus } from "./features.js";
 import * as flathub from "./providers/flathub.js";
 import { createJob, appendLine, finishJob } from "./jobs.js";
@@ -15,7 +14,6 @@ export interface Package {
   repo: string;
   installed: boolean;
   /** Which real source this came from, and the id to install by. */
-  /** Where it came from. "apt" added so Debian/Ubuntu boxes report honestly. */
   source: "flathub" | "pacman" | "apt";
   appId?: string;
   icon?: string;
@@ -26,7 +24,7 @@ export interface PackageResult {
   packages: Package[];
 }
 
-const NAME_RE = /^[a-z0-9@][a-z0-9@._+-]*$/i;
+const NAME_RE = /^[a-z0-9@._+-]+$/i;
 
 let updatesCache: { at: number; count: number | null } | null = null;
 
@@ -38,35 +36,22 @@ let updatesCache: { at: number; count: number | null } | null = null;
 export async function updatesCount(): Promise<number | null> {
   if (updatesCache && Date.now() - updatesCache.at < 15 * 60_000) return updatesCache.count;
   let count: number | null = null;
-
-  // Ask whichever package manager this machine actually has. Used to check
-  // for `checkupdates` alone, which meant every Debian or Ubuntu box reported
-  // "cannot check" forever and offered to install pacman-contrib.
-  const pm = await detectPkg();
-  if (pm) {
-    try {
-      count = (await pm.updates()).length;
-    } catch {
-      count = null; // asked and couldn't answer — different from "none"
-    }
+  if (await has("checkupdates")) {
+    const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
+    count = r.stdout.trim() ? r.stdout.trim().split("\n").length : 0;
+  } else if (await has("apt")) {
+    const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+    count = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).length;
   } else if (await isDemo()) count = 3;
-
   updatesCache = { at: Date.now(), count };
   return count;
 }
 
 /** Zero updates and "cannot check" are different things; the UI says which. */
 export async function updatesStatus(): Promise<FeatureStatus> {
-  const pm = await detectPkg();
-  if (pm) return { available: true, demo: false, tool: pm.bin, install: pm.bin };
-  if (await isDemo()) return { available: true, demo: true, tool: "none", install: "" };
-  return {
-    available: false,
-    demo: false,
-    tool: "none",
-    install: "",
-    reason: "No supported package manager found on this machine.",
-  };
+  if (await has("checkupdates")) return check("checkupdates");
+  if (await has("apt")) return { available: true, demo: false, tool: "apt" };
+  return { available: false, demo: false, tool: "packages", install: "apt or pacman", reason: "No supported native package manager was found." };
 }
 
 export async function listUpdates(): Promise<PackageResult> {
@@ -79,22 +64,19 @@ export async function listUpdates(): Promise<PackageResult> {
       { name: "omarchy", version: "3.4.1 → 3.5.0", description: "Omarchy", repo: "omarchy", installed: true, source: "pacman" },
     ] };
   }
-
-  const pm = await detectPkg();
-  if (!pm) return { status: f, packages: [] };
-
-  const rows = await pm.updates();
-  return {
-    status: f,
-    packages: rows.map(([name, from, to]) => ({
-      name,
-      version: `${from} → ${to}`,
-      description: "",
-      repo: "",
-      installed: true,
-      source: pm.id,
-    })),
-  };
+  if (await has("checkupdates")) {
+    const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
+    return { status: f, packages: r.stdout.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, from, , to] = line.split(/\s+/);
+      return { name, version: `${from} → ${to}`, description: "", repo: "", installed: true, source: "pacman" as const };
+    }) };
+  }
+  const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+  const packages = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).map((line) => {
+    const m = line.match(/^([^/]+)\/\S+\s+(\S+).*\[upgradable from: ([^\]]+)\]/i);
+    return { name: m?.[1] ?? line.split("/")[0], version: m ? `${m[3]} → ${m[2]}` : "", description: "", repo: "apt", installed: true, source: "apt" as const };
+  });
+  return { status: f, packages };
 }
 
 /**

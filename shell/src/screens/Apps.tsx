@@ -1,3 +1,4 @@
+import { openApp } from "../lib/openApp";
 import { useEffect, useMemo, useState } from "react";
 import { Search, ChevronDown, Play, Trash2, Globe, Download, Check, LayoutGrid, Smartphone, Monitor, Plus, Usb } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -57,19 +58,24 @@ export function Apps({ onJob, params }: ScreenProps) {
     if (params.get("add") === "1") setWebSheet(true);
   }, [params]);
 
-  const launch = (a: AppEntry) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: a.id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  // A web app opened from a phone (or any other device) belongs in that device's
+  // browser; asking the box to open it would put it on the box's own screen.
+  const remote = !["127.0.0.1", "localhost"].includes(location.hostname) || window.matchMedia("(max-width: 840px)").matches;
+  const launch = (a: AppEntry) => void openApp(a, toast); void remote;
+  const launchOnBox = (a: AppEntry) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: a.id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  void launchOnBox;
   const install = (p: Package) => void api.post<Job>("/api/store/install", { name: p.name, appId: p.appId, source: p.source }).then((j) => onJob(j.id)).catch((e) => toast(e.message, "error"));
   const remove = (a: AppEntry) => void api.post<{ ok: boolean; message: string; jobId?: string }>("/api/apps/remove", { id: a.id }).then((r) => { r.jobId ? onJob(r.jobId) : toast(r.message, r.ok ? "ok" : "error"); reload(); }).catch((e) => toast(e.message, "error"));
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
-    return (apps ?? []).filter((a) => (filter === "all" || a.provider === filter) && (!needle || a.name.toLowerCase().includes(needle) || a.comment.toLowerCase().includes(needle)));
+    return (apps ?? []).filter((a) => !a.parent && (filter === "all" || a.provider === filter) && (!needle || a.name.toLowerCase().includes(needle) || a.comment.toLowerCase().includes(needle)));
   }, [apps, q, filter]);
 
   const isOpen = (a: AppEntry) => windows?.some((w) => w.appId === a.id);
   const statusOf = (a: AppEntry) => (isOpen(a) ? "Open" : a.provider === "web" ? "Web app" : a.provider === "android" ? "On your phone" : a.source === "flatpak" ? "Flatpak" : "Installed");
   const card = (a: AppEntry) => (
-    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
+    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.includes?.length ? `${a.comment || statusOf(a)} · with ${a.includes.join(" · ")}` : a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id).map((k) => ({ label: `Open ${k.name}`, onClick: () => launch(k) })), ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
   );
 
   const groups = useMemo(() => {
@@ -167,7 +173,7 @@ export function Apps({ onJob, params }: ScreenProps) {
 function StoreCard({ p, onInstall }: { p: Package; onInstall: (p: Package) => void }) {
   // Real artwork from the catalogue when it has some, a coloured initial otherwise.
   const icon = p.source === "flathub" && p.appId ? <span className="app-icon real" style={{ ["--ic" as string]: colorFor(p.name) }}><img src={`/api/store/icon/${encodeURIComponent(p.appId)}`} alt="" loading="lazy" onError={(e) => ((e.currentTarget.parentElement as HTMLElement).textContent = p.name.charAt(0).toUpperCase())} /></span> : <AppIcon name={p.name} color={colorFor(p.name)} />;
-  const from = p.source === "flathub" ? `Flathub · ${p.version}` : `${p.repo || (p.source === "apt" ? "Ubuntu" : "Arch")} · ${p.version}`;
+  const from = p.source === "flathub" ? `Flathub · ${p.version}` : `${p.repo || "Arch"} · ${p.version}`;
   return (
     <ItemCard icon={icon} title={p.name} subtitle={p.description || p.repo} meta={<><Dot state={p.installed ? "on" : "off"} /> {p.installed ? "Installed" : from}</>} action={p.installed ? <span className="pill green"><Check size={12} /> Installed</span> : <button type="button" className="btn sm pillbtn primary" onClick={() => onInstall(p)}><Download size={13} /> Get</button>} />
   );

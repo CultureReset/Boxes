@@ -1,5 +1,4 @@
 import { spawn } from "node:child_process";
-import { PHONE_SERIAL } from "../../platform/phoneSerial.js";
 import { has, launchDetached, run } from "../../exec.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
@@ -114,10 +113,7 @@ export async function androidStatus(): Promise<AndroidStatus> {
 }
 
 async function readyDevice(): Promise<AndroidDevice | null> {
-  const ready = (await androidStatus()).devices.filter((d) => d.state === "device");
-  // On a Ghost box the phone is named (NEXTGENT_ANDROID_SERIAL); never another.
-  if (PHONE_SERIAL) return ready.find((d) => d.serial === PHONE_SERIAL) ?? null;
-  return ready[0] ?? null;
+  return (await androidStatus()).devices.find((d) => d.state === "device") ?? null;
 }
 
 async function listPackages(serial: string): Promise<string[]> {

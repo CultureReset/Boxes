@@ -1,7 +1,8 @@
+import { openApp, openWindowView, showAppView } from "../lib/openApp";
 import { useMemo } from "react";
-import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb } from "lucide-react";
+import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
-import type { AndroidStatus, AppEntry, Automation, CalendarEvent, FileEntry, Notification, WindowEntry } from "../api/types";
+import type { AndroidStatus, AppEntry, Automation, CalendarEvent, ControlStatus, FileEntry, Notification, ServicesReport, WindowEntry } from "../api/types";
 import { useStatus } from "../state/status";
 import { useToast } from "../state/toast";
 import { Section } from "../components/Section";
@@ -26,7 +27,24 @@ function useApps() {
 
 function useLaunch() {
   const toast = useToast();
-  return (id: string) => void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  const { byId } = useApps();
+  return (id: string) => {
+    const a = byId.get(id);
+    if (a) return void openApp(a, toast);
+    void api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id }).then((r) => toast(r.message, r.ok ? "ok" : "error")).catch((e) => toast(e.message, "error"));
+  };
+}
+
+/** The ⋯ menu on a parent tile: open it, or open one of the apps that live under it. */
+function useKidsMenu(apps: AppEntry[] | null | undefined) {
+  const menu = useMenu();
+  const toast = useToast();
+  const fn = (a: AppEntry) => {
+    const kids = (apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id);
+    if (!kids.length) return undefined;
+    return (e: React.MouseEvent) => menu.open(e, [{ label: `Open ${a.name}`, onClick: () => void openApp(a, toast) }, ...kids.map((k) => ({ label: `Open ${k.name}`, onClick: () => void openApp(k, toast) }))]);
+  };
+  return Object.assign(fn, { element: menu.element });
 }
 
 function todayRange() {
@@ -78,7 +96,7 @@ export function ContinueRow(_: RowProps) {
       {windows === null && [1, 2, 3].map((i) => <Skeleton key={i} h={92} w={300} />)}
       {(windows ?? []).map((w) => {
         const a = w.appId ? byId.get(w.appId) : undefined;
-        return <ItemCard key={w.address} icon={<AppIcon icon={a?.icon ?? w.class} name={a?.name ?? w.class} color={a?.color} />} title={a?.name ?? w.class} subtitle={w.title} meta={<>{w.focused ? <Dot state="on" /> : <Dot state="off" />} {w.focused ? "Active" : `Workspace ${w.workspace}`}</>} onClick={() => void api.post("/api/windows/focus", { address: w.address })} onMore={(e) => menu.open(e, [{ label: "Switch to", onClick: () => void api.post("/api/windows/focus", { address: w.address }) }, { label: "Close", danger: true, onClick: () => void api.post("/api/windows/close", { address: w.address }) }])} />;
+        return <ItemCard key={w.address} icon={<AppIcon icon={a?.icon ?? w.class} name={a?.name ?? w.class} color={a?.color} />} title={a?.name ?? w.class} subtitle={w.title} meta={<>{w.focused ? <Dot state="on" /> : <Dot state="off" />} {w.focused ? "Active" : `Workspace ${w.workspace}`}</>} onClick={() => void openWindowView(w)} onMore={(e) => menu.open(e, [{ label: "Switch to", onClick: () => void api.post("/api/windows/focus", { address: w.address }) }, { label: "Close", danger: true, onClick: () => void api.post("/api/windows/close", { address: w.address }) }])} />;
       })}
       {(recent ?? []).slice(0, 4).map((f) => <ItemCard key={f.path} icon={<FileGlyph kind={f.kind} />} title={f.name} subtitle={`Edited ${timeAgo(f.modified)}`} meta="Files" onClick={() => void api.post("/api/open", { target: f.path })} />)}
       {windows && windows.length === 0 && (recent ?? []).length === 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#636e7b" }}><AppWindow size={26} /></span>} title="Nothing open yet" subtitle="Open an app and it will show up here" onClick={() => navigate("apps")} />}
@@ -87,17 +105,25 @@ export function ContinueRow(_: RowProps) {
   );
 }
 
+/** "Paperclip · with OpenClaw · Hermes" */
+function withParts(a: AppEntry, text: string): string {
+  return a.includes?.length ? `${text} · with ${a.includes.join(" · ")}` : text;
+}
+
 export function AppsRow(_: RowProps) {
   const { apps } = useApps();
+  const kidsMenu = useKidsMenu(apps);
   const { data: windows } = useApi<WindowEntry[]>("/api/windows", ["windows"]);
   const launch = useLaunch();
-  const list = (apps ?? []).filter((a) => a.provider === "linux");
+  const all = apps ?? [];
+  const list = [...all.filter((a) => a.provider === "web" && !a.parent), ...all.filter((a) => a.provider === "linux")];
   return (
     <Section title="My Apps" onTitle={() => navigate("apps")}>
+      {kidsMenu.element}
       {apps === null && [1, 2, 3, 4].map((i) => <Skeleton key={i} h={92} w={300} />)}
-      {list.slice(0, 10).map((a) => {
+      {list.slice(0, 24).map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.comment || "App"} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} />;
+        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment || "App")} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
     </Section>
   );
@@ -105,14 +131,16 @@ export function AppsRow(_: RowProps) {
 
 export function WebAppsRow(_: RowProps) {
   const { apps } = useApps();
+  const kidsMenu = useKidsMenu(apps);
   const { data: windows } = useApi<WindowEntry[]>("/api/windows", ["windows"]);
   const launch = useLaunch();
-  const list = (apps ?? []).filter((a) => a.provider === "web");
+  const list = (apps ?? []).filter((a) => a.provider === "web" && !a.parent);
   return (
     <Section title="Web Apps" onTitle={() => navigate("apps", undefined, { filter: "web" })} link="Add" onLink={() => navigate("apps", undefined, { filter: "web", add: "1" })}>
+      {kidsMenu.element}
       {list.map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={a.comment} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} onClick={() => launch(a.id)} />;
+        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment)} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
       {apps && list.length === 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#0a84ff" }}><Globe size={26} /></span>} title="Add a web app" subtitle="Toast, Facebook, Gmail and more" meta={<Pill><Plus size={11} /> Add</Pill>} onClick={() => navigate("apps", undefined, { filter: "web", add: "1" })} />}
     </Section>
@@ -175,6 +203,86 @@ export function AutomationsRow({ onJob }: RowProps) {
         return <ItemCard key={t.name} icon={<span className="app-icon" style={{ ["--ic" as string]: "#2b2f3a" }}><Icon size={26} /></span>} title={t.name} subtitle={t.description} meta={<Pill><Plus size={11} /> Add</Pill>} onClick={() => void api.post("/api/automations", t).then(() => toast(`Added ${t.name}`))} />;
       })}
       {menu.element}
+    </Section>
+  );
+}
+
+export function ServicesRow(_: RowProps) {
+  const { data, reload } = useApi<ServicesReport>("/api/services");
+  const control = useApi<ControlStatus[]>("/api/control");
+  const menu = useMenu();
+  const toast = useToast();
+  if (!data) return null;
+  const act = async (c: ControlStatus, action: "start" | "stop" | "restart") => {
+    toast(`${action === "start" ? "Starting" : action === "stop" ? "Stopping" : "Restarting"} ${c.name}…`, "info");
+    try {
+      const r = await api.post<{ ok: boolean; error?: string }>(`/api/control/${c.id}/${action}`);
+      toast(r.ok ? `${c.name}: ${action} done` : `${c.name}: ${r.error ?? "failed"}`, r.ok ? "ok" : "error");
+    } catch (e) {
+      toast(`${c.name}: ${e instanceof Error ? e.message : String(e)}`, "error");
+    }
+    void control.reload();
+    void reload();
+  };
+  const itemsFor = (c: ControlStatus, prefix = "") => [
+    ...(c.url ? [{ label: `${prefix}Open`, onClick: () => showAppView({ kind: "web", url: c.url!, title: c.name }) }] : []),
+    ...(c.self ? [] : [{ label: `${prefix}Start`, icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
+    { label: `${prefix}Restart`, onClick: () => void act(c, "restart") },
+    ...(c.self ? [] : [{ label: `${prefix}Stop`, danger: true, onClick: () => void act(c, "stop") }]),
+  ];
+  // Entries with a parent (OpenClaw under Paperclip) live inside the parent's entry.
+  const childrenOf = (c: ControlStatus) => (control.data ?? []).filter((x) => x.parent === c.id);
+  const controlMenu = (e: React.MouseEvent, c: ControlStatus) =>
+    menu.open(e, [
+      ...itemsFor(c),
+      ...childrenOf(c).flatMap((ch) => [{ divider: true, label: "" }, ...itemsFor(ch, `${ch.name.split(" ")[0]}: `)]),
+    ]);
+  const partsLine = (c: ControlStatus) => {
+    const parts = [...childrenOf(c).map((ch) => `${ch.name.split(" ")[0]} ${ch.status === "running" ? "●" : "○"}`), ...(c.includes ?? []).map((i) => i.name)];
+    return parts.length ? ` · with ${parts.join(" · ")}` : "";
+  };
+  const linked = data.ports.filter((p) => p.url);
+  // Units of a child entry (OpenClaw under Paperclip) are shown inside the parent, not here.
+  const childUnits = new Set((control.data ?? []).filter((c) => c.parent).flatMap((c) => c.units.map((u) => u.replace(/\.service$/, ""))));
+  const running = data.services.filter((s) => s.running && !childUnits.has(s.name));
+  const down = data.services.filter((s) => !s.running && s.kind === "docker");
+  const open = (url: string) => showAppView({ kind: "web", url, title: new URL(url, location.href).host });
+  const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
+  return (
+    <Section title="Running on This Computer">
+      {data.health && (
+        <ItemCard
+          key="health"
+          icon={icon(data.health.ok ? "#30d158" : "#ff453a")}
+          title={data.health.ok ? "Health: all good" : data.health.stale ? "Health: check not running" : `Health: ${data.health.failures} failing`}
+          subtitle={data.health.checkedAt ? `Checked ${data.health.checkedAt}` : "No health check yet"}
+          meta={<><Dot state={data.health.ok ? "on" : "alert"} /> {data.health.checks.length} checks</>}
+        />
+      )}
+      {data.health?.checks.filter((c) => !c.ok).map((c) => (
+        <ItemCard key={`h${c.name}`} icon={icon("#ff453a")} title={c.name} subtitle={c.detail} meta={<><Dot state="alert" /> Failing</>} />
+      ))}
+      {control.data?.filter((c) => !c.parent).map((c) => (
+        <ItemCard
+          key={`c${c.id}`}
+          icon={icon(c.status === "running" ? "#30d158" : c.status === "partial" ? "#ff9f0a" : c.tier === "core" ? "#ff453a" : "#8e8e93")}
+          title={c.name}
+          subtitle={`${c.why}${partsLine(c)}`}
+          meta={<><Dot state={c.status === "running" ? "on" : c.status === "partial" ? "warn" : c.tier === "core" ? "alert" : "off"} /> {c.status === "running" ? "Running" : c.status === "partial" ? "Partly running" : "Stopped"} · {c.tier === "core" ? "Core" : "On demand"}</>}
+          onClick={(e) => controlMenu(e, c)}
+          onMore={(e) => controlMenu(e, c)}
+        />
+      ))}
+      {menu.element}
+      {linked.map((p) => (
+        <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} onClick={() => open(p.url!)} />
+      ))}
+      {down.map((s) => (
+        <ItemCard key={`d${s.name}`} icon={icon("#ff453a")} title={s.name} subtitle={s.description} meta={<><Dot state="alert" /> {s.state}</>} />
+      ))}
+      {running.map((s) => (
+        <ItemCard key={`${s.kind}${s.name}`} icon={icon(s.kind === "docker" ? "#64d2ff" : "#5e5ce6")} title={s.name} subtitle={s.description} meta={<><Dot state="on" /> {s.kind === "docker" ? "Container" : "Service"}</>} />
+      ))}
     </Section>
   );
 }

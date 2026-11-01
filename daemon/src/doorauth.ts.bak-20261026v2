@@ -1,0 +1,76 @@
+import http from "node:http";
+import { createHash } from "node:crypto";
+
+/**
+ * One login for NODE: the node-door session. The door sets `door_session`
+ * (HttpOnly, Secure) on steve-ms-7c02...ts.net; cookies are per host, not per
+ * port, so every NODE port (14443, frame proxies) receives it as first-party.
+ * Requests that arrive through `tailscale serve` / a remote address must carry
+ * a valid door session. The PC's own screen (loopback, no proxy headers) is
+ * trusted as before.
+ */
+const DOOR = (process.env.NODEOS_DOOR_URL ?? "http://127.0.0.1:7700").replace(/\/$/, "");
+export const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
+export const NODE_PUBLIC = process.env.NODEOS_PUBLIC_ORIGIN ?? "https://steve-ms-7c02.tail1af4f2.ts.net:14443";
+
+const cache = new Map<string, { email: string | null; until: number }>();
+
+export function doorToken(req: http.IncomingMessage): string {
+  const a = req.headers.authorization ?? "";
+  if (a.startsWith("Bearer ")) return a.slice(7).trim();
+  for (const part of (req.headers.cookie ?? "").split(";")) {
+    const [k, ...v] = part.trim().split("=");
+    if (k === "door_session") return v.join("=");
+  }
+  return "";
+}
+
+/** Cookie header without the door session, so apps never see it. */
+export function stripDoorCookie(cookie: string | undefined): string | undefined {
+  if (!cookie) return cookie;
+  const kept = cookie.split(";").map((s) => s.trim()).filter((s) => s && !s.startsWith("door_session="));
+  return kept.length ? kept.join("; ") : undefined;
+}
+
+export function isRemote(req: http.IncomingMessage): boolean {
+  const ra = req.socket.remoteAddress ?? "";
+  const self = process.env.NODEOS_HOST; // this PC's own tailnet address (node-healthcheck calls it directly)
+  const loop = ra === "127.0.0.1" || ra === "::1" || ra === "::ffff:127.0.0.1" || (!!self && (ra === self || ra === "::ffff:" + self));
+  const proxied = Boolean(req.headers["x-forwarded-for"] || req.headers["tailscale-user-login"] || req.headers["x-forwarded-proto"]);
+  return !loop || proxied;
+}
+
+export async function doorUser(req: http.IncomingMessage): Promise<string | null> {
+  const tok = doorToken(req);
+  if (!tok) return null;
+  const k = createHash("sha256").update(tok).digest("hex");
+  const c = cache.get(k);
+  if (c && c.until > Date.now()) return c.email;
+  let email: string | null = null;
+  try {
+    const r = await fetch(`${DOOR}/me`, { headers: { authorization: `Bearer ${tok}` }, signal: AbortSignal.timeout(4000) });
+    if (r.ok) email = ((await r.json()) as { user?: { email?: string } }).user?.email ?? null;
+  } catch { return null; } // door down: fail closed, do not cache
+  if (cache.size > 2000) cache.clear();
+  cache.set(k, { email, until: Date.now() + (email ? 60_000 : 5_000) });
+  return email;
+}
+
+/** true = allowed to continue. Otherwise the response was sent. */
+export async function requireDoor(req: http.IncomingMessage, res: http.ServerResponse, framed = false): Promise<boolean> {
+  if (!isRemote(req)) return true;
+  if (await doorUser(req)) return true;
+  const login = `${DOOR_PUBLIC}/login?return=${encodeURIComponent(NODE_PUBLIC + "/")}`;
+  const url = req.url ?? "/";
+  if (!framed && url.startsWith("/api/")) {
+    res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" });
+    res.end(JSON.stringify({ error: "sign in first", login }));
+  } else if (!framed && req.method === "GET") {
+    res.writeHead(302, { location: login, "cache-control": "no-store" });
+    res.end();
+  } else {
+    res.writeHead(401, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
+    res.end(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width"><body style="font-family:system-ui;background:#0b0f14;color:#e6e9ef;display:grid;place-items:center;height:100vh;margin:0"><p>Sign in to NODE first. <a style="color:#0a84ff" target="_top" href="${login}">Sign in</a></p>`);
+  }
+  return false;
+}

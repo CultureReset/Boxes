@@ -13,19 +13,11 @@ import { CAPABILITIES } from "../platform/capabilities.js";
  * what makes a 3B model on a mini-PC sufficient: it is choosing and phrasing,
  * not knowing.
  *
- * Any OpenAI-compatible endpoint — Ollama, llama.cpp's server, vLLM. The box
+ * Any OpenAI-compatible endpoint; on this box that is LiteLLM (:4000), the only gateway. The box
  * ships pointed at localhost. No key, no network, no per-question cost.
  */
 
-// Port 8080 is llama-swap, which fronts llama.cpp and loads whichever model
-// is asked for. It used to default to 11434, which is Ollama's — so a box with
-// its own models built and running still reached for something that wasn't
-// installed, and the escalation path silently did nothing.
-//
-// "fast" is the small Qwen3 4B. This path only runs when the deterministic
-// router has already failed to match, so it wants to be quick, not clever.
-// Set NODEOS_LLM_MODEL to coder, reason or big to change that.
-const BASE = process.env.NODEOS_LLM_URL ?? "http://127.0.0.1:8080/v1";
+import { GATEWAY as BASE, gatewayHeaders } from "../gateway.js";
 const MODEL = process.env.NODEOS_LLM_MODEL ?? "fast";
 const TIMEOUT_MS = 20_000;
 
@@ -42,7 +34,7 @@ async function chat(messages: Array<{ role: string; content: string }>, maxToken
     const res = await fetch(`${BASE.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       signal: ctrl.signal,
-      headers: { "Content-Type": "application/json" },
+      headers: await gatewayHeaders(),
       body: JSON.stringify({ model: MODEL, messages, temperature: 0, max_tokens: maxTokens, stream: false }),
     });
     if (!res.ok) return "";
@@ -59,7 +51,7 @@ export async function available(): Promise<boolean> {
   const ctrl = new AbortController();
   const t = setTimeout(() => ctrl.abort(), 2500);
   try {
-    const res = await fetch(`${BASE.replace(/\/$/, "")}/models`, { signal: ctrl.signal });
+    const res = await fetch(`${BASE.replace(/\/$/, "")}/models`, { signal: ctrl.signal, headers: await gatewayHeaders(false) });
     return res.ok;
   } catch {
     return false;
@@ -90,7 +82,7 @@ export async function converse(
     res = await fetch(`${BASE.replace(/\/$/, "")}/chat/completions`, {
       method: "POST",
       signal,
-      headers: { "Content-Type": "application/json" },
+      headers: await gatewayHeaders(),
       body: JSON.stringify({
         model: MODEL,
         messages: [

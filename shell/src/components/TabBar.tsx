@@ -1,4 +1,4 @@
-import { MoreHorizontal } from "lucide-react";
+import { Settings as SettingsIcon } from "lucide-react";
 import { navigate } from "../lib/router";
 import { SCREENS } from "../modules/registry";
 
@@ -15,8 +15,8 @@ export function TabBar({ active }: { active: string }) {
         </button>
       ))}
       <button type="button" className={inMore ? "active" : ""} onClick={() => navigate("settings")}>
-        <MoreHorizontal size={22} strokeWidth={inMore ? 2.4 : 1.8} />
-        More
+        <SettingsIcon size={22} strokeWidth={inMore ? 2.4 : 1.8} />
+        Settings
       </button>
     </nav>
   );

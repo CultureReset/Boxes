@@ -1,5 +1,4 @@
 import { route, UNROUTED, type Match } from "./router.js";
-import { refusal } from "./gate.js";
 import { NotConnected, PlatformError } from "./client.js";
 
 /**
@@ -121,11 +120,9 @@ function fallback(data: unknown): string[] {
  * Deterministic all the way through: match a declared phrase, run the
  * capability, present what came back. No model anywhere in this path.
  */
-export async function answer(sentence: string, kernelUp = false): Promise<Answer> {
+export async function answer(sentence: string): Promise<Answer> {
   const match: Match | null = route(sentence);
   if (!match) return { lines: [UNROUTED], ok: false };
-  const refused = refusal(match.capability, "sentence", kernelUp);
-  if (refused) return { lines: [refused], ok: false, capability: match.capability.key };
 
   try {
     const data = await match.capability.run({});

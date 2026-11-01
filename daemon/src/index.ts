@@ -1,5 +1,10 @@
+import { handleBridge } from "./appbridge.js";
+import { streamWindow } from "./winstream.js";
+import { startFrameProxies } from "./frameproxy.js";
+import { requireDoor } from "./doorauth.js";
 import http from "node:http";
 import path from "node:path";
+import { askPaperclip } from "./modules/paperclip.js";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
@@ -25,6 +30,8 @@ import { listThemes, setTheme, listBackgrounds, nextBackground, setBackground } 
 import { listProviders, personasForWorld, ask } from "./modules/agents.js";
 import { listWorlds, switchWorld, saveWorld, deleteWorld, type World } from "./modules/worlds.js";
 import { weather } from "./modules/weather.js";
+import { servicesReport, healthReport } from "./modules/services.js";
+import { controlList, controlOne, controlAction } from "./modules/control.js";
 import { check } from "./modules/features.js";
 import { TEMPLATES, listAutomations, saveAutomation, deleteAutomation, runAutomation, startScheduler } from "./modules/automations.js";
 import { listNotifications, markRead, clearAll, sendDesktop, watchDbus } from "./modules/notifications.js";
@@ -33,32 +40,11 @@ import type { Automation, CalendarEvent } from "./types.js";
 import { platformConfig, savePlatformConfig, isConnected } from "./platform/config.js";
 import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
-import { CAPABILITIES, BY_KEY } from "./platform/capabilities.js";
+import { CAPABILITIES } from "./platform/capabilities.js";
+import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend, renameChat, logExchange } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
-import { kernelStatus, collections as kernelCollections, read as kernelRead, act as kernelAct } from "./modules/kernel.js";
-import { decide } from "./platform/decide.js";
-import { refusal } from "./platform/gate.js";
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
-
-/**
- * Which address to listen on.
- *
- * Default stays 127.0.0.1 — a box sitting in a restaurant back office should
- * not answer the local network just because someone joined the wifi. That was
- * the right call and it stays the default.
- *
- * But it was hardcoded, which also made the box unreachable over Tailscale,
- * where the owner legitimately wants to open it from their phone.
- *
- * So: set NODEOS_HOST to the box's Tailscale address (the 100.x.x.x one,
- * `tailscale ip -4`) and it becomes reachable on that private network and
- * nowhere else. Devices on your tailnet can see it; the wifi, the router and
- * the internet cannot.
- *
- * Setting this to 0.0.0.0 WOULD expose it to the local network. Don't, unless
- * you mean it.
- */
 const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = process.env.NODEOS_SHELL_DIST ?? path.resolve(here, "../../shell/dist");
@@ -105,43 +91,7 @@ api.post("/api/platform/connect", async ({ body }) => {
 
 /** Ask the box something, deterministically. The voice and SMS paths call this
  *  same function, so a spoken question and a typed one cannot diverge. */
-// The ask bar. When a kernel is attached the sentence becomes a task it
-// decided on; with no kernel the box still answers from the platform it knows.
-api.post("/api/ask", async ({ body }) => {
-  const text = str(obj(body).text, "text", { max: 500 });
-  const resource = str(obj(body).resource, "resource", { optional: true, max: 128 }) || "default";
-  return decide(text, resource);
-});
-
-/**
- * Run one capability by name.
- *
- * `/api/ask` is for a sentence someone said — it goes through the router and
- * the router decides. This is for a screen that already knows which thing it
- * wants: a tile tapped in the app store, a button on the calendar. No routing,
- * no guessing, no model.
- *
- * The key must exist in the registry. An unknown key is a 404, not an attempt
- * to be helpful — the static allowlist is the whole point.
- */
-api.post("/api/capability", async ({ body }) => {
-  const b = obj(body);
-  const key = str(b.key, "key", { max: 100 });
-
-  const cap = BY_KEY.get(key);
-  if (!cap) throw new HttpError(404, `No capability called "${key}"`);
-  const refused = refusal(cap, "button");
-  if (refused) throw new HttpError(403, refused);
-
-  // Slots arrive as strings; that's what run() expects.
-  const raw = obj(b.args ?? {});
-  const args: Record<string, string> = {};
-  for (const [k, v] of Object.entries(raw)) {
-    if (v !== null && v !== undefined) args[k] = String(v).slice(0, 2000);
-  }
-
-  return cap.run(args);
-});
+api.post("/api/ask", ({ body }) => answer(str(obj(body).text, "text", { max: 500 })));
 
 api.get("/api/business/menu", async () => {
   const { slug } = await platformConfig();
@@ -190,17 +140,6 @@ api.get("/api/business/availability", async ({ query }) => {
 // line. Hearing and speaking both happen here, on this machine.
 
 api.get("/api/voice", () => voiceStatus());
-
-// ---- Kernel ---------------------------------------------------------------
-// The kernel decides; this screen renders. Every path below comes from the
-// kernel's own handshake, so nothing here has to be edited when it changes.
-api.get("/api/kernel", () => kernelStatus());
-api.get("/api/kernel/collections", async () => ({ collections: await kernelCollections() }));
-api.get("/api/kernel/read/:collection", (c) => kernelRead(c.params.collection));
-api.post("/api/kernel/act/:action", (c) => {
-  const b = obj(c.body);
-  return kernelAct(c.params.action, b.body, b.id === undefined ? undefined : str(b.id, "id"));
-});
 api.get("/api/voice/history", ({ query }) => history(Number(query.get("limit") ?? 50)));
 
 /** A transcript from anywhere — SIP, a carrier webhook, a VM. Text in, text out. */
@@ -213,8 +152,11 @@ api.post("/api/voice/text", async ({ body }) => {
 /** Audio in, audio back. 16kHz mono WAV, base64. What a phone bridge posts. */
 api.post("/api/voice/heard", async ({ body }) => {
   const b = obj(body);
-  const wav = Buffer.from(str(b.wav, "wav", { max: 12_000_000 }), "base64");
-  const turn = await handleAudio(wav, (str(b.channel, "channel", { optional: true, max: 16 }) || "phone") as Channel);
+  const channel = (str(b.channel, "channel", { optional: true, max: 16 }) || "phone") as Channel;
+  // A browser posts its own recording format (webm/mp4) as `audio` + `mime`; a phone bridge posts 16 kHz WAV.
+  const turn = b.audio
+    ? await transcribeAny(Buffer.from(str(b.audio, "audio", { max: 40_000_000 }), "base64"), str(b.mime, "mime", { optional: true, max: 64 }) ?? "").then(async (heard) => ({ ...(await handle(heard, channel)), heard }))
+    : await handleAudio(Buffer.from(str(b.wav, "wav", { max: 12_000_000 }), "base64"), channel);
   const spoken = await reply(turn);
   return { ...turn, wav: spoken ? spoken.wav.toString("base64") : null, engine: spoken?.engine ?? "none" };
 });
@@ -273,6 +215,11 @@ api.get("/api/icon/:name", async ({ params, res }) => {
 });
 
 // ---- Windows (Hyprland) ------------------------------------------------
+api.get("/api/services", () => servicesReport());
+api.get("/api/health", () => healthReport());
+api.get("/api/control", () => controlList());
+api.get("/api/control/:id", ({ params }) => controlOne(params.id));
+api.post("/api/control/:id/:action", ({ params }) => controlAction(params.id, params.action));
 api.get("/api/windows", () => listWindows());
 api.post("/api/windows/focus", async ({ body }) => ({ ok: await focusWindow(str(obj(body).address, "address")) }));
 api.post("/api/windows/close", async ({ body }) => ({ ok: await closeWindow(str(obj(body).address, "address")) }));
@@ -354,6 +301,13 @@ api.post("/api/backgrounds/set", ({ body }) => setBackground(str(obj(body).file,
 
 // ---- Agents & automations ------------------------------------------------
 api.get("/api/agents", async () => ({ providers: await listProviders(), personas: (await personasForWorld()).map(({ system, ...p }) => p) }));
+api.post("/api/chats/:id/paperclip", async ({ params, body }) => {
+  const c = await getChat(params.id);
+  const note = str(obj(body).text, "text", { optional: true, max: 8000 }) ?? "";
+  const convo = (c?.messages ?? []).filter((m) => !m.error).slice(-12).map((m) => `${m.role === "user" ? "Matt" : "Assistant"}: ${m.content}`).join("\n\n");
+  const prompt = (note ? note + "\n\n" : "") + "Task from this NODE chat:\n\n" + convo;
+  return askPaperclip(prompt.slice(0, 20_000), "a NODE chat", { chat: params.id });
+});
 api.post("/api/agents/ask", ({ body }) => {
   const b = obj(body);
   return ask(str(b.prompt, "prompt", { max: 8000 }), str(b.persona, "persona", { optional: true, max: 32 }) || "general", str(b.provider, "provider", { optional: true, max: 32 }) || undefined);
@@ -368,6 +322,51 @@ api.get("/api/notifications", () => listNotifications());
 api.post("/api/notifications/read", ({ body }) => markRead(obj(body).all ? "all" : ((obj(body).ids as string[]) ?? [])));
 api.post("/api/notifications/clear", () => clearAll());
 api.post("/api/notifications/send", ({ body }) => sendDesktop(str(obj(body).title, "title", { max: 200 }), str(obj(body).body, "body", { optional: true, max: 1000 })));
+
+// ---- Chat with a chosen model ---------------------------------------------
+api.get("/api/chat/models", () => chatModels());
+api.get("/api/chats", ({ query }) => listChats(query.get("q") ?? ""));
+api.post("/api/chats/:id/rename", ({ params, body }) => renameChat(params.id, str(obj(body).title, "title", { max: 200 })));
+api.post("/api/chat/log", ({ body }) => {
+  const b = obj(body);
+  const items = (Array.isArray(b.items) ? b.items : []).slice(0, 20).map((x) => { const o = obj(x); return { role: (o.role === "user" ? "user" : "assistant") as "user" | "assistant", content: str(o.text, "text", { max: 20_000 }) }; });
+  return logExchange(str(b.source, "source", { max: 24 }).replace(/[^a-z0-9_-]/gi, "") || "talk", str(b.chat, "chat", { optional: true, max: 64 }) || null, items);
+});
+/** Streaming send: NDJSON lines {delta} ... then {done, chat, reply}. */
+api.post("/api/chat/stream", async ({ body, res }) => {
+  const b = obj(body);
+  const ids = Array.isArray(b.attachments) ? (b.attachments as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10) : [];
+  res.writeHead(200, { "Content-Type": "application/x-ndjson", "Cache-Control": "no-store", "X-Accel-Buffering": "no" });
+  try {
+    const out = await chatSend(str(b.chat, "chat", { optional: true, max: 64 }) || null, str(b.text, "text", { optional: true, max: 20_000 }) ?? "", str(b.model, "model", { max: 128 }), ids,
+      (t) => res.write(JSON.stringify({ delta: t }) + "\n"));
+    res.end(JSON.stringify({ done: true, ...out }) + "\n");
+  } catch (e) {
+    res.end(JSON.stringify({ error: (e as Error).message.slice(0, 300) }) + "\n");
+  }
+});
+api.get("/api/chats/:id", ({ params }) => getChat(params.id));
+api.delete("/api/chats/:id", ({ params }) => deleteChat(params.id));
+api.post("/api/chats/:id/model", ({ params, body }) => setChatModel(params.id, str(obj(body).model, "model", { max: 128 })));
+api.post("/api/chat/send", ({ body }) => {
+  const b = obj(body);
+  const ids = Array.isArray(b.attachments) ? (b.attachments as unknown[]).filter((x): x is string => typeof x === "string").slice(0, 10) : [];
+  return chatSend(str(b.chat, "chat", { optional: true, max: 64 }) || null, str(b.text, "text", { optional: true, max: 20_000 }) ?? "", str(b.model, "model", { max: 128 }), ids);
+});
+api.post("/api/chat/upload", ({ body }) => {
+  const b = obj(body);
+  return chatUpload(str(b.name, "name", { max: 255 }), str(b.type, "type", { optional: true, max: 128 }) ?? "", Buffer.from(str(b.data, "data", { max: 40_000_000 }), "base64"));
+});
+api.get("/api/chat/upload/:id", async ({ params, res }) => {
+  const u = await uploadFile(params.id);
+  res.writeHead(200, { "Content-Type": u.type, "Content-Disposition": `inline; filename="${u.name.replace(/"/g, "")}"`, "Cache-Control": "private, max-age=86400" });
+  res.end(await readFile(u.file));
+});
+/** Any browser recording (webm, mp4, wav), base64. Returns the words only; nothing is run. */
+api.post("/api/voice/transcribe", async ({ body }) => {
+  const b = obj(body);
+  return { text: await transcribeAny(Buffer.from(str(b.audio, "audio", { max: 40_000_000 }), "base64"), str(b.mime, "mime", { optional: true, max: 64 }) ?? "") };
+});
 
 // ---- Static shell -------------------------------------------------------
 const MIME: Record<string, string> = { ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".css": "text/css", ".svg": "image/svg+xml", ".png": "image/png", ".jpg": "image/jpeg", ".woff2": "font/woff2", ".json": "application/json", ".ico": "image/x-icon", ".webmanifest": "application/manifest+json" };
@@ -393,38 +392,109 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
   }
 }
 
-/**
- * Origins allowed to call the API.
- *
- * Localhost always, because that's the box talking to its own shell.
- *
- * Plus whatever NODEOS_HOST is bound to — otherwise serving the shell over
- * Tailscale hands the browser a page whose every API call comes back 403, and
- * you get a black screen with no clue why. The page loads, the app starts, the
- * first fetch is refused, nothing renders.
- *
- * This does not open anything new. The daemon only listens on the address it
- * was told to bind to, so trusting that same address as an origin lets the
- * shell talk to the daemon it was served by, and nothing else.
- */
-const ALLOWED_ORIGIN = new RegExp(
-  `^https?://(127\\.0\\.0\\.1|localhost|${HOST.replace(/\./g, "\\.")})(:\\d+)?$`,
-);
+
+// ---- Door sign-in (one login for NODE) ------------------------------------
+// The shell signs in through node-door (127.0.0.1:7700). /door/* is a plain
+// same-origin reverse-proxy route to it, so the door's session cookie is
+// first-party on this origin. Every /api/* call from a browser must carry a
+// valid door session; the daemon checks it with the door's own /me.
+// Local callers (healthcheck, the door's machine proxy) on this computer's own
+// addresses without X-Forwarded-For are trusted as before.
+const DOOR = process.env.NODEOS_DOOR ?? "http://127.0.0.1:7700";
+// The door's public HTTPS address. Browsers on a raw tailnet IP over plain http are sent there:
+// the door's session cookie is "Secure; SameSite=None", which Safari drops on http, so sign-in "worked" then bounced.
+const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
+function plainHttp(req: http.IncomingMessage): boolean {
+  const xfp = String(req.headers["x-forwarded-proto"] ?? "");
+  return !xfp.includes("https") && !(req.socket as unknown as { encrypted?: boolean }).encrypted;
+}
+function rawIpHost(req: http.IncomingMessage): boolean {
+  const h = (req.headers.host ?? "").replace(/:\d+$/, "").replace(/^\[|\]$/g, "");
+  return (/^\d+\.\d+\.\d+\.\d+$/.test(h) || h.includes(":")) && h !== "127.0.0.1" && h !== "::1";
+}
+function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
+  const u = new URL(DOOR);
+  const sub = (req.url ?? "/").replace(/^\/door/, "") || "/";
+  const headers: http.OutgoingHttpHeaders = {};
+  for (const k of ["content-type", "content-length", "accept", "cookie", "authorization", "user-agent", "mcp-session-id", "mcp-protocol-version"]) if (req.headers[k]) headers[k] = req.headers[k];
+  const xff = req.headers["x-forwarded-for"];
+  const peer = (req.socket.remoteAddress ?? "").replace(/^::ffff:/, "");
+  headers["x-forwarded-for"] = xff ? `${xff}` : peer;
+  const up = http.request({ hostname: u.hostname, port: u.port, method: req.method, path: sub, headers }, (r) => {
+    const out: http.OutgoingHttpHeaders = { "Cache-Control": "no-store" };
+    for (const k of ["content-type", "content-length", "set-cookie", "mcp-session-id"]) if (r.headers[k]) out[k] = r.headers[k];
+    // Plain http (e.g. an old http://<tailnet-ip>:7770 bookmark): a Secure cookie would be dropped, so issue it as Lax, non-Secure here.
+    if (plainHttp(req) && out["set-cookie"]) out["set-cookie"] = ([] as string[]).concat(out["set-cookie"] as string[]).map((c) => c.replace(/;\s*Secure/gi, "").replace(/SameSite=None/gi, "SameSite=Lax"));
+    res.writeHead(r.statusCode ?? 502, out);
+    r.pipe(res);
+  });
+  up.on("error", () => { if (!res.headersSent) sendJson(res, 502, { error: "door unreachable" }); else res.end(); });
+  req.pipe(up);
+}
 
 const server = http.createServer(async (req, res) => {
-  // A browser tab on any other origin cannot read responses (no CORS headers)
-  // and cannot POST (JSON body forces a preflight we never answer).
-  const origin = req.headers.origin;
-  if (origin && !ALLOWED_ORIGIN.test(origin)) {
-    sendJson(res, 403, { error: "Forbidden origin" });
-    return;
+  // Raw-IP plain-http page loads go to the one public door (same path), where sign-in sticks.
+  if (rawIpHost(req) && plainHttp(req) && (req.method === "GET" || req.method === "HEAD") && String(req.headers.accept ?? "").includes("text/html")) {
+    res.writeHead(301, { Location: DOOR_PUBLIC + (req.url ?? "/"), "Cache-Control": "no-store" }); res.end(); return;
   }
+  // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.
+  if (req.url?.startsWith("/api/bridge/")) return handleBridge(req, res);
+  // One login: remote devices (tailnet / Funnel) need a node-door session.
+  // The NODE door: same-origin route to node-door, open signed-out so the in-page login works.
+  if (req.url === "/door" || req.url?.startsWith("/door/")) return proxyDoor(req, res);
+  // One gate (doorauth.ts) for data. The static shell carries no data; signed out it shows the door login in-page.
+  if (req.url?.startsWith("/api/") && !(await requireDoor(req, res))) return;
+  // Only ever talk to the local shell. A browser tab on another origin cannot
+  // read responses (no CORS headers) and cannot POST (JSON body forces preflight).
+  const origin = req.headers.origin;
+  if (origin) {
+    let allowed = false;
+    try {
+      const o = new URL(origin);
+      const host = (req.headers.host ?? "").split(":")[0];
+      allowed = (o.protocol === "http:" || o.protocol === "https:") && (o.hostname === "127.0.0.1" || o.hostname === "localhost" || o.hostname === host || o.hostname === HOST);
+    } catch {}
+    if (!allowed) {
+      sendJson(res, 403, { error: "Forbidden origin" });
+      return;
+    }
+  }
+  // The brace above was missing, so `if (origin)` swallowed everything below
+  // it and TypeScript reported the error at the end of the file. Two effects:
+  // it would not compile, and had it compiled, the /api/ routing would only
+  // have run for requests that arrived WITH an Origin header — which the shell
+  // does not send. Every API call from the shell would have fallen through to
+  // serveStatic and come back as HTML.
+  if (req.url?.startsWith("/api/windows/stream")) return streamWindow(req, res);
   if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });
     return;
   }
   await serveStatic(req, res);
 });
+
+// Also listen on loopback when NODEOS_HOST is another address (the Tailscale
+// IP), so `tailscale serve` and local tools can reach 127.0.0.1:7770 even
+// before tailscale0 has its address at boot.
+if (HOST !== "127.0.0.1" && HOST !== "0.0.0.0" && HOST !== "::") {
+  const loop = http.createServer((req, res) => server.emit("request", req, res));
+  loop.on("error", (e) => console.error(`NODE loopback listener: ${(e as Error).message}`));
+  loop.listen(PORT, "127.0.0.1", () => console.log(`NODE daemon also listening on http://127.0.0.1:${PORT}`));
+  for (const sig of ["SIGINT", "SIGTERM"] as const) process.on(sig, () => loop.close());
+}
+
+// The Tailscale address may not exist yet right after boot. Retry instead of
+// crashing; the loopback listener keeps serving meanwhile.
+server.on("error", (e: NodeJS.ErrnoException) => {
+  if (e.code === "EADDRNOTAVAIL") {
+    console.error(`NODE: ${HOST} not available yet; retrying in 5s`);
+    setTimeout(() => server.listen(PORT, HOST), 5000).unref();
+    return;
+  }
+  throw e;
+});
+
+startFrameProxies();
 
 server.listen(PORT, HOST, async () => {
   const s = await status();

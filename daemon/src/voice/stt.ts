@@ -13,7 +13,7 @@ import path from "node:path";
  * above decides whether they mean anything.
  */
 
-export type Model = "whisper-cpp" | "faster-whisper" | "none";
+export type Model = "whisper-cpp" | "faster-whisper" | "llama-swap" | "none";
 
 let cached: Model | null = null;
 
@@ -22,8 +22,39 @@ export async function model(): Promise<Model> {
   if (await has("whisper-cli")) cached = "whisper-cpp";
   else if (await has("whisper-cpp")) cached = "whisper-cpp";
   else if (await has("faster-whisper")) cached = "faster-whisper";
+  else if (await swapHasAsr()) cached = "llama-swap";
   else cached = "none";
-  return cached;
+  // Only remember a working answer; "none" is retried so a late llama-swap is found.
+  const found = cached;
+  if (found === "none") cached = null;
+  return found;
+}
+
+/** LiteLLM (:4000) must expose Qwen3-ASR as model "asr" on /v1/audio/transcriptions. */
+import { GATEWAY as SWAP, gatewayHeaders } from "../gateway.js";
+const SWAP_ASR = process.env.NODEOS_STT_SWAP_MODEL ?? "asr";
+
+async function swapHasAsr(): Promise<boolean> {
+  try {
+    const r = await fetch(`${SWAP}/models`, { signal: AbortSignal.timeout(3000), headers: await gatewayHeaders(false) });
+    if (!r.ok) return false;
+    const j = (await r.json()) as { data?: { id: string }[] };
+    return (j.data ?? []).some((m) => m.id === SWAP_ASR);
+  } catch {
+    return false;
+  }
+}
+
+async function swapTranscribe(wav: Buffer): Promise<string> {
+  const form = new FormData();
+  form.append("file", new Blob([new Uint8Array(wav)], { type: "audio/wav" }), "in.wav");
+  form.append("model", SWAP_ASR);
+  form.append("response_format", "json"); // LiteLLM -> asr-shim -> llama-swap only accepts json
+  const r = await fetch(`${SWAP}/audio/transcriptions`, { method: "POST", body: form, headers: await gatewayHeaders(false), signal: AbortSignal.timeout(120_000) });
+  if (!r.ok) return "";
+  const j = (await r.json()) as { text?: string };
+  // Qwen3-ASR prefixes its output with "language English<asr_text>".
+  return (j.text ?? "").replace(/^.*<asr_text>/s, "").trim();
 }
 
 const MODEL_PATH = process.env.NODEOS_STT_MODEL ?? "/usr/share/whisper/ggml-small.en.bin";
@@ -32,6 +63,7 @@ const MODEL_PATH = process.env.NODEOS_STT_MODEL ?? "/usr/share/whisper/ggml-smal
 export async function transcribe(wav: Buffer): Promise<string> {
   const m = await model();
   if (m === "none") return "";
+  if (m === "llama-swap") return swapTranscribe(wav);
 
   const dir = await mkdtemp(path.join(tmpdir(), "nodeos-stt-"));
   const input = path.join(dir, "in.wav");

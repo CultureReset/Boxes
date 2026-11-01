@@ -1,0 +1,82 @@
+[
+ {
+  "slug": "openjarvis",
+  "upstream": "http://127.0.0.1:5173",
+  "localPort": 17801,
+  "servePort": 20443,
+  "path": "/"
+ },
+ {
+  "slug": "twenty-crm",
+  "upstream": "http://127.0.0.1:3000",
+  "localPort": 17802,
+  "servePort": 26443,
+  "path": "/"
+ },
+ {
+  "slug": "paperclip",
+  "upstream": "http://127.0.0.1:3100",
+  "localPort": 17803,
+  "servePort": 30443,
+  "path": "/"
+ },
+ {
+  "slug": "n8n",
+  "upstream": "http://127.0.0.1:5678",
+  "localPort": 17804,
+  "servePort": 25443,
+  "path": "/"
+ },
+ {
+  "slug": "litellm",
+  "upstream": "http://127.0.0.1:4000",
+  "localPort": 17805,
+  "servePort": 23443,
+  "path": "/ui/"
+ },
+ {
+  "slug": "searxng",
+  "upstream": "http://127.0.0.1:8888",
+  "localPort": 17806,
+  "servePort": 29443,
+  "path": "/"
+ },
+ {
+  "slug": "openclaw",
+  "upstream": "http://127.0.0.1:18789",
+  "localPort": 17807,
+  "servePort": 31443,
+  "path": "/"
+ },
+ {
+  "slug": "uptime-kuma",
+  "upstream": "http://127.0.0.1:3002",
+  "localPort": 17808,
+  "servePort": 27443,
+  "path": "/"
+ },
+ {
+  "slug": "navidrome",
+  "upstream": "http://127.0.0.1:4533",
+  "localPort": 17809,
+  "servePort": 24443,
+  "path": "/",
+  "remoteUserHeader": "Remote-User",
+  "remoteUser": "matt",
+  "localAddress": "127.0.0.2"
+ },
+ {
+  "slug": "crawl4ai",
+  "upstream": "http://127.0.0.1:11235",
+  "localPort": 17810,
+  "servePort": 32443,
+  "path": "/playground"
+ },
+ {
+  "slug": "llama-swap",
+  "upstream": "http://127.0.0.1:8080",
+  "localPort": 17811,
+  "servePort": 33443,
+  "path": "/"
+ }
+]

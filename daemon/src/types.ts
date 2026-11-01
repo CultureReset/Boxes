@@ -13,6 +13,13 @@ export interface AppEntry {
   color?: string;
   desktopFile?: string;
   url?: string;
+  /** Same app, through the frame proxy, for NODE's in-app view. */
+  frameUrl?: string;
+  /** "tab": open top-level (apps with logins or that block framing). */
+  openIn?: "tab";
+  /** Slug of the app this one lives under (shown inside it, not top level). */
+  parent?: string;
+  includes?: string[];
   package?: string;
 }
 
