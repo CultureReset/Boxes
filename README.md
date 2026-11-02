@@ -1,5 +1,9 @@
 # NODE (Boxes)
 
+> Status: current — the screen block of a Ghost box; this default branch is **behind** `sync/steve-2026-10-31` (see Known gaps) — last verified against code 2026-11-02 (commit ae6e0ad)
+
+## What it is
+
 A Linux computer the owner talks to. Everything on screen, nothing in a terminal.
 
 This is **the TV screen of a Ghost box**: home screens, apps, agents, files, a
@@ -24,25 +28,13 @@ apps, files and meetings are sample data. The banner says so on screen.*
 
 
 
-<!-- branches:start -->
-## Branches
+## Where it fits
 
-*Read from GitHub on 2026-09-29. 6 branches.*
+- **Called by:** the owner, on the TV and through the ask bar and voice routes; installed by `nextgent-ghost-image` as the `boxes` block (unit `ghost-tv`, port 7770 by default per `module.manifest.json`).
+- **Calls:** `nextgent-platform` core (`NEXTGENT_CORE_URL`, default `http://127.0.0.1:8764`) for anything that changes something; a platform API for read-only business answers (`NODEOS_API_URL`, `NODEOS_API_TOKEN`), which is `gcr-api-clean`; the one phone through adb pinned to `NEXTGENT_ANDROID_SERIAL`.
+- **Database rule:** only `gcr-api-clean` talks to the live cloud database (`cyber check`). The daemon, shell and menu app hold no database key. **Exception to fix:** `services/voice/` creates Supabase clients itself (see Known gaps).
+- **Branches:** default is `claude/linux-build-cleanup-dfpu0e`; `main` is stale (the monorepo import notes say so). The newest work is `sync/steve-2026-10-31`. Others: `claude/repo-code-analysis-y4n1k7` (pinned by `nextgent-ghost-image`), `fix/ubuntu-node-support`, `working-box`, `claude/repo-docs-review-pt7b58`, `docs/product-readme`, `claude/agent-ecosystem-architecture-nzexu1`, two `backup/` branches.
 
-- **Default branch on GitHub:** `claude/linux-build-cleanup-dfpu0e`. It does **not** yet have this README or the audit fixes; those are on `claude/repo-code-analysis-y4n1k7`, which contains every commit of `claude/linux-build-cleanup-dfpu0e` and more, so it can be fast-forwarded without losing anything.
-- **`claude/repo-code-analysis-y4n1k7`** is where the README audit, the screenshots and the fixes were made.
-- Every other branch is already contained in `claude/repo-code-analysis-y4n1k7`; nothing is only on another branch.
-
-| Branch | Last commit | Not in the work branch | Last commit message |
-| --- | --- | --- | --- |
-| `claude/repo-code-analysis-y4n1k7` (work branch) | 2026-09-29 | - | this README and the audit fixes |
-| `fix/ubuntu-node-support` | 2026-09-28 | 0 | Show Ubuntu source in app store |
-| `working-box` | 2026-09-22 | 0 | Capability loader, phone and notify capabilities, apt support, Tailscale |
-| `claude/repo-docs-review-pt7b58` | 2026-09-21 | 0 | feat(daemon): the ask bar goes through the kernel |
-| `claude/linux-build-cleanup-dfpu0e` (default) | 2026-09-15 | 0 | spec: the orchestration architecture |
-| `main` | 2026-09-15 | 0 | spec: the orchestration architecture |
-
-<!-- branches:end -->
 
 ## Anything that changes something goes through the kernel
 
@@ -64,14 +56,16 @@ neither core nor the box's declared phrases recognise is then handed to an
 installed coding-agent CLI (`claude`, `codex`, `opencode`, `copilot`, `crush`,
 `pi`) or to the local model. That fallback does not go through core.
 
-## Run it
+## Run / test
+
+**Unverified in this pass** (no installs; commands copied from `package.json`).
 
 ```bash
 npm install
 npm run dev          # daemon on :7770, shell on :5173
 npm run dev:menu     # the menu app on :3000
 npm run build        # daemon + shell, what the installer runs
-npm test             # daemon tests (8)
+npm test             # daemon tests: 8 test cases counted in decide.test.ts and gate.test.ts
 ```
 
 With no desktop session the daemon starts in demo mode with sample data. On a
@@ -327,3 +321,17 @@ inherited `Linux-` desktop layer and is not part of the business path above.
   the "say it once, it lands everywhere" half — are not in this repo. The design is
   finished and sitting in `cybercheck-orchestrator/db/*.sql` and
   `src/kernel/channels.js`; it needs one decision before it moves.
+
+## Known gaps
+
+- **Default branch is not the newest.** `sync/steve-2026-10-31` is one commit ahead (230 files changed: a working-tree sync from a machine named `steve-MS-7C02`, including about 150 `.bak-*` backup files). `node-foundation/apps/boxes` comes from it. The monorepo copy in `nextgent-box/boxes/` and the Ghost installer's pin (`claude/repo-code-analysis-y4n1k7`) are older.
+- **`sync/steve-2026-10-31` is on a PUBLIC repository** and its `config/services-control.json` lists 18 services and contains the machine's tailnet hostname. Consider making the repo private or removing that file from history.
+- **`services/voice/` breaks the architecture rule.** It reads `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_KEY` from its environment and queries a database directly (`config/supabase.js`, `config/database.js`, several services). It is a separate cloud-side Twilio service, not started by the Ghost installer, and it never calls the box's `/api/voice/*`. Credentials must come from the environment; do not commit them.
+- **Unmerged branch:** `claude/agent-ecosystem-architecture-nzexu1` holds `pairing.ts` and `creds.ts` for `/api/nodes/pair`, but also moves Jarvis to the cloud, which the design rejects.
+- The ask bar's fallback to a coding-agent CLI or local model does not go through core.
+- `box/image/stage-cybercheck` is a Raspberry Pi image; do not run it on a Ghost box (a second adb owner).
+- No evidence in this repo of the TV running on a real box; screenshots are demo mode with sample data.
+
+## Related repos
+
+`nextgent-platform` (core), `nextgent-ghost-image` (installer), `nextgent-box` (monorepo copy), `gcr-api-clean` (platform API), `node-foundation` (newer copy under `apps/boxes`), `Linux-` (older desktop layer this replaced), `ghost-ai` (origin of `services/voice`).
