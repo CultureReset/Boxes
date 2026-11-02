@@ -2,7 +2,8 @@ import { mkdir, readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { JsonStore, id } from "../store.js";
-import { HOME } from "../paths.js";
+import { HOME, DATA_DIR } from "../paths.js";
+import { uploadDirDefault } from "../mode.js";
 import { run } from "../exec.js";
 import { HttpError } from "../router.js";
 import { transcribe } from "../voice/stt.js";
@@ -17,7 +18,7 @@ import { transcribe } from "../voice/stt.js";
 
 import { GATEWAY as LITELLM, gatewayKey } from "../gateway.js";
 const LITELLM_ENV = process.env.NODEOS_LITELLM_ENV ?? path.join(HOME, ".config/litellm/litellm.env");
-export const UPLOAD_DIR = process.env.NODEOS_UPLOAD_DIR ?? "/hdd/home/steve/nodeos/uploads";
+export const UPLOAD_DIR = uploadDirDefault(DATA_DIR);
 const VISION_MODEL = process.env.NODEOS_VISION_MODEL ?? "v4";
 const VISION = new Set([VISION_MODEL]);
 /** Not chat models: speech, its projector, embeddings. */

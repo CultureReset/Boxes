@@ -1,9 +1,11 @@
 import { has, run } from "../exec.js";
 import { isDemo } from "./status.js";
+import { hostedMode, HOSTED_MESSAGE } from "../mode.js";
 
 export type PowerAction = "lock" | "sleep" | "restart" | "shutdown" | "logout";
 
 export async function power(action: PowerAction): Promise<{ ok: boolean; message: string }> {
+  if (hostedMode()) return { ok: false, message: HOSTED_MESSAGE };
   if (await isDemo()) return { ok: true, message: `Would ${action} (demo mode)` };
   switch (action) {
     case "lock":
@@ -32,6 +34,7 @@ export interface PowerProfile {
 }
 
 export async function powerProfiles(): Promise<PowerProfile[]> {
+  if (hostedMode()) return [];
   if (!(await has("powerprofilesctl"))) return ["power-saver", "balanced", "performance"].map((n) => ({ name: n, active: n === "balanced" }));
   const list = await run("powerprofilesctl", ["list"]);
   const out: PowerProfile[] = [];
@@ -43,6 +46,7 @@ export async function powerProfiles(): Promise<PowerProfile[]> {
 }
 
 export async function setPowerProfile(name: string): Promise<void> {
+  if (hostedMode()) return;
   if (!/^[a-z-]+$/.test(name)) return;
   if (await has("powerprofilesctl")) await run("powerprofilesctl", ["set", name]);
 }

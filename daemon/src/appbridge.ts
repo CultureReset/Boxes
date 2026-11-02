@@ -20,7 +20,7 @@ function token(): string {
     mkdirSync(path.dirname(TOKEN_FILE), { recursive: true, mode: 0o700 });
     writeFileSync(TOKEN_FILE, randomBytes(32).toString("hex") + "\n", { mode: 0o600 });
   }
-  chmodSync(TOKEN_FILE, 0o600);
+  try { chmodSync(TOKEN_FILE, 0o600); } catch { /* a read-only mounted secret keeps the mode it was given */ }
   return readFileSync(TOKEN_FILE, "utf8").trim();
 }
 token();

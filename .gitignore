@@ -4,3 +4,11 @@ dist/
 .env
 .env.local
 *.log
+
+# Editor/agent backup copies of source files (dozens are tracked already; this
+# only stops new ones being added). Not deleted from history here.
+*.bak-*
+dist.bak-*/
+
+# Provisioned customers: generated env, secrets, firewall rules. Never commit.
+customers/

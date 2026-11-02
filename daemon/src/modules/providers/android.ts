@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { has, launchDetached, run } from "../../exec.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
+import { hostedMode, HOSTED_MESSAGE } from "../../mode.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
 
@@ -94,6 +95,7 @@ async function scrcpyInfo(): Promise<{ ok: boolean; version?: string }> {
 }
 
 export async function androidStatus(): Promise<AndroidStatus> {
+  if (hostedMode()) return { available: false, reason: HOSTED_MESSAGE, scrcpy: false, devices: [] };
   const demo = await isDemo();
   if (!(await has("adb"))) {
     return demo ? { available: true, scrcpy: true, scrcpyVersion: "3.3", devices: [DEMO_DEVICE] } : { available: false, reason: "Install android-tools and scrcpy from the App Store to connect a phone.", scrcpy: false, devices: [] };
@@ -156,6 +158,7 @@ function windowTitle(pkg: string): string {
 }
 
 async function launch(pkg: string): Promise<{ ok: boolean; message: string }> {
+  if (hostedMode()) return { ok: false, message: HOSTED_MESSAGE };
   const dev = await readyDevice();
   if (!dev) return { ok: false, message: "No phone connected" };
   if (await isDemo()) return { ok: true, message: pkg === MIRROR_ID ? `Would mirror ${dev.model}` : `Would open ${KNOWN[pkg]?.name ?? humanize(pkg)} on ${dev.model}` };
@@ -196,6 +199,7 @@ export const androidProvider: AppProvider = {
 
 /** Push a live event whenever a phone is plugged in or unplugged. */
 export async function watchAndroid(): Promise<void> {
+  if (hostedMode()) return;
   if (!(await has("adb"))) return;
   const connect = () => {
     const child = spawn("adb", ["track-devices"], { stdio: ["ignore", "pipe", "ignore"] });

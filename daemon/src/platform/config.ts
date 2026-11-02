@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
 import os from "node:os";
+import { secret, businessName } from "../mode.js";
 
 /**
  * Where the box is pointed, and who it is.
@@ -37,9 +38,10 @@ export async function platformConfig(): Promise<PlatformConfig> {
   }
   cached = {
     baseUrl: process.env.NODEOS_API_URL ?? onDisk.baseUrl ?? EMPTY.baseUrl,
-    token: process.env.NODEOS_API_TOKEN ?? onDisk.token ?? EMPTY.token,
+    // NODEOS_API_TOKEN, or the file named by NODEOS_API_TOKEN_FILE (a mounted secret).
+    token: secret("NODEOS_API_TOKEN") ?? onDisk.token ?? EMPTY.token,
     slug: process.env.NODEOS_SLUG ?? onDisk.slug ?? EMPTY.slug,
-    businessName: onDisk.businessName ?? EMPTY.businessName,
+    businessName: onDisk.businessName ?? (businessName() || EMPTY.businessName),
   };
   return cached;
 }

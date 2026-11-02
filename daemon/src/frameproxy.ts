@@ -2,8 +2,10 @@ import http from "node:http";
 import net from "node:net";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import os from "node:os";
 import { requireDoor, isRemote, doorUser, stripDoorCookie } from "./doorauth.js";
 import { fileURLToPath } from "node:url";
+import { hostedMode, nodePublic } from "./mode.js";
 
 /**
  * Frame proxies: one loopback port per web app, fronted by `tailscale serve`
@@ -23,7 +25,7 @@ export function frames(): Frame[] {
   try { return JSON.parse(readFileSync(FILE, "utf8")) as Frame[]; } catch { return []; }
 }
 
-const NODE_ORIGIN = process.env.NODEOS_PUBLIC_ORIGIN ?? "https://steve-ms-7c02.tail1af4f2.ts.net:14443";
+const NODE_ORIGIN = nodePublic();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
   const out: http.OutgoingHttpHeaders = { ...h };
@@ -45,7 +47,7 @@ function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
  */
 async function liteLLMLogin(up: URL): Promise<string | null> {
   try {
-    const env = readFileSync(process.env.NODEOS_LITELLM_ENV ?? path.join(process.env.HOME ?? "/home/steve", ".config/litellm/litellm.env"), "utf8");
+    const env = readFileSync(process.env.NODEOS_LITELLM_ENV ?? path.join(process.env.HOME ?? os.homedir(), ".config/litellm/litellm.env"), "utf8");
     const get = (k: string) => env.match(new RegExp(`^${k}=["']?([^"'\n]+)`, "m"))?.[1] ?? "";
     const user = get("UI_USERNAME"), pass = get("UI_PASSWORD") || get("LITELLM_MASTER_KEY");
     if (!user || !pass) return null;
@@ -109,5 +111,6 @@ function start(f: Frame): void {
 }
 
 export function startFrameProxies(): void {
+  if (hostedMode()) return; // these front services on the owner's own computer
   for (const f of frames()) start(f);
 }

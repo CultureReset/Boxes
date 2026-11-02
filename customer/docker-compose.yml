@@ -1,0 +1,175 @@
+# One customer's NODE. One compose project per customer: the project name carries
+# the slug, so containers, networks and volumes of two customers never share a name.
+#
+# Normally driven by scripts/provision-customer.sh, which writes the env file and
+# secrets. By hand:
+#
+#   docker compose -f customer/docker-compose.yml --env-file customers/<slug>/compose.env up -d
+#   docker compose -f customer/docker-compose.yml --env-file customers/<slug>/compose.env --profile desktop up -d
+#
+# Shape (see docs/CUSTOMER-NODE.md):
+#
+#   host loopback :NODE_HOST_PORT --> edge --(inner, internal)--> node
+#                                      |
+#                                      +--(edge net)--> allow-listed hosts only (EDGE_ALLOW)
+#
+#   [profile desktop]  host loopback :DESKTOP_HOST_PORT --> desktop (noVNC)
+#                      desktop --(web net)--> the internet; the host firewall rules
+#                      written by the provision script keep that net off the LAN.
+#
+# The node container is attached to one network only, and that network is
+# `internal: true`: it has no route to the host, the LAN, the tailnet or the
+# internet. Its only way out is the proxy in `edge`.
+#
+# Deliberately absent everywhere: docker.sock, privileged, host networking, host
+# PID/IPC, devices (no USB, no /dev/dri), added capabilities, bind mounts of host
+# paths other than the per-customer secret files.
+
+name: nodeos-${CUSTOMER_SLUG:?CUSTOMER_SLUG is required (use scripts/provision-customer.sh)}
+
+x-hardened: &hardened
+  restart: unless-stopped
+  read_only: true
+  cap_drop: [ALL]
+  security_opt: ["no-new-privileges:true"]
+  ipc: private
+  stop_grace_period: 20s
+  logging:
+    driver: json-file
+    options: { max-size: "10m", max-file: "3" }
+
+services:
+  node:
+    <<: *hardened
+    image: ${NODE_IMAGE:-nodeos-customer:local}
+    build:
+      context: ..
+      dockerfile: customer/Dockerfile
+    init: true
+    user: "10001:10001"
+    cpus: ${NODE_CPUS:-1.0}
+    mem_limit: ${NODE_MEMORY:-768m}
+    memswap_limit: ${NODE_MEMORY:-768m}
+    pids_limit: ${NODE_PIDS:-256}
+    ulimits:
+      nofile: { soft: 4096, hard: 4096 }
+    networks: [inner]
+    depends_on: [edge]
+    environment:
+      NODEOS_MODE: customer
+      NODEOS_HOST: 0.0.0.0
+      # Who this is. Every one of these is required; the daemon refuses to start without them.
+      NODEOS_OWNER_NAME: ${NODEOS_OWNER_NAME:?}
+      NODEOS_BUSINESS_NAME: ${NODEOS_BUSINESS_NAME:?}
+      NODEOS_SLUG: ${NODEOS_SLUG:?}
+      PAPERCLIP_API_URL: ${PAPERCLIP_API_URL:?}
+      PAPERCLIP_COMPANY_ID: ${PAPERCLIP_COMPANY_ID:?}
+      PAPERCLIP_LEAD_ID: ${PAPERCLIP_LEAD_ID:?}
+      NODEOS_API_URL: ${NODEOS_API_URL:?}
+      # Secrets arrive as files, never as environment values.
+      NODEOS_APP_TOKEN_FILE: /run/secrets/app_token
+      NODEOS_API_TOKEN_FILE: /run/secrets/api_token
+      # The only way out is the proxy (Node 22.21+ honours these with NODE_USE_ENV_PROXY).
+      NODE_USE_ENV_PROXY: "1"
+      HTTP_PROXY: http://edge:8888
+      HTTPS_PROXY: http://edge:8888
+      NO_PROXY: 127.0.0.1,localhost,edge,desktop
+    secrets: [app_token, api_token]
+    volumes:
+      - node-data:/data
+    tmpfs:
+      - /tmp:size=64m,mode=1777,noexec,nosuid,nodev
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:7770/api/status').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 30s
+      timeout: 5s
+      start_period: 20s
+      retries: 3
+
+  edge:
+    <<: *hardened
+    image: ${EDGE_IMAGE:-nodeos-customer-edge:local}
+    build:
+      context: edge
+    init: true
+    cpus: 0.25
+    mem_limit: 64m
+    memswap_limit: 64m
+    pids_limit: 64
+    networks: [inner, edge]
+    environment:
+      EDGE_ALLOW: ${EDGE_ALLOW:?}
+      EDGE_UPSTREAM: node:7770
+    ports:
+      - "127.0.0.1:${NODE_HOST_PORT:?}:7770"
+    tmpfs:
+      - /tmp:size=8m,mode=1777,noexec,nosuid,nodev
+    healthcheck:
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 7770 && nc -z 127.0.0.1 8888"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  # ---- OPTIONAL: profile "desktop" -----------------------------------------
+  # UNTESTED. Written without a Docker daemon available: this service has never
+  # been built or started. It is off unless you pass --profile desktop.
+  desktop:
+    <<: *hardened
+    profiles: ["desktop"]
+    image: ${DESKTOP_IMAGE:-nodeos-customer-desktop:local}
+    build:
+      context: desktop
+    user: "10003:10003"
+    cpus: ${DESKTOP_CPUS:-2.0}
+    mem_limit: ${DESKTOP_MEMORY:-2g}
+    memswap_limit: ${DESKTOP_MEMORY:-2g}
+    pids_limit: ${DESKTOP_PIDS:-512}
+    shm_size: 512m
+    networks: [inner, web]
+    secrets: [vnc_password]
+    volumes:
+      - browser-profile:/profile
+    tmpfs:
+      - /tmp:size=512m,mode=1777,nosuid,nodev
+    ports:
+      # noVNC in a browser: http://127.0.0.1:<DESKTOP_HOST_PORT>/ . Loopback only; a
+      # per-customer door in front of it is what makes it reachable by the customer.
+      - "127.0.0.1:${DESKTOP_HOST_PORT:?}:6080"
+      # Chromium DevTools for agents is on desktop:9223 inside the project network only.
+      # To drive it from the host, add: "127.0.0.1:<port>:9223" (unauthenticated; loopback only).
+    healthcheck:
+      test: ["CMD-SHELL", "exec 3<>/dev/tcp/127.0.0.1/6080"]
+      interval: 30s
+      timeout: 5s
+      start_period: 30s
+      retries: 3
+
+networks:
+  # No route out at all. The node container lives here.
+  inner:
+    internal: true
+  # The edge proxy's way out. Its subnet is fixed so the host firewall can name it.
+  edge:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${EDGE_SUBNET:?}
+  # The desktop browser's way out (profile desktop only), on its own subnet so it is
+  # never given the exception the edge subnet gets for the Paperclip address.
+  web:
+    driver: bridge
+    ipam:
+      config:
+        - subnet: ${WEB_SUBNET:?}
+
+volumes:
+  node-data: {}
+  browser-profile: {}
+
+secrets:
+  app_token:
+    file: ${SECRETS_DIR:?}/app_token
+  api_token:
+    file: ${SECRETS_DIR:?}/api_token
+  vnc_password:
+    file: ${SECRETS_DIR:?}/vnc_password

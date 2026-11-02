@@ -9,8 +9,10 @@ import { networkState } from "./network.js";
 import { bluetoothState } from "./bluetooth.js";
 import { brightnessState } from "./display.js";
 import { updatesCount } from "./packages.js";
+import { hostedMode, hostedInfo } from "../mode.js";
 
 async function battery(): Promise<Status["battery"]> {
+  if (hostedMode()) return null; // /sys here is the host's hardware, not the customer's
   try {
     const entries = await readdir("/sys/class/power_supply");
     const bat = entries.find((e) => /^BAT/i.test(e));
@@ -68,6 +70,8 @@ let demoCache: boolean | null = null;
 /** Demo mode means no compositor and no session tools: use canned data. */
 export async function isDemo(): Promise<boolean> {
   if (demoCache !== null) return demoCache;
+  // Hosted: no compositor is expected, and canned data must never stand in for a customer's real state.
+  if (hostedMode()) return (demoCache = process.env.NODEOS_DEMO === "1");
   demoCache = process.env.NODEOS_DEMO === "1" || process.env.NODEOS_DEMO !== "0" && !(await has("hyprctl")) && !(await has("wmctrl")) && !(await has("xdotool")) && !process.env.DISPLAY && !process.env.WAYLAND_DISPLAY;
   return demoCache;
 }
@@ -101,6 +105,7 @@ export async function status(): Promise<Status> {
     background: bg,
     uptimeSeconds: os.uptime(),
     capabilities: caps,
+    ...(hostedInfo() ? { hosted: hostedInfo()! } : {}),
   };
 }
 

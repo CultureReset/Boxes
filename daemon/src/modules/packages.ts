@@ -6,6 +6,7 @@ import { createJob, appendLine, finishJob } from "./jobs.js";
 import { refreshAppsCache } from "./apps.js";
 import { HttpError } from "../router.js";
 import type { Job } from "../types.js";
+import { hostedMode, HOSTED_MESSAGE } from "../mode.js";
 
 export interface Package {
   name: string;
@@ -175,6 +176,7 @@ export async function installedPackages(): Promise<string[]> {
  * through pkexec so polkit shows the system password dialog.
  */
 export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman" | "apt"): Promise<Job> {
+  if (hostedMode()) throw new HttpError(503, HOSTED_MESSAGE);
   if (source === "flathub" || (name && source !== "pacman" && name.includes(".") && flathub.validId(name) && action !== "update")) {
     const f = await flathub.status();
     if (!f.available) throw new HttpError(503, f.reason!);

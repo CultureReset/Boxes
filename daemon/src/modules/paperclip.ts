@@ -1,19 +1,18 @@
 import { createJob, appendLine, finishJob } from "./jobs.js";
 import type { Job } from "../types.js";
+import { paperclipSettings, issueDescription } from "../mode.js";
 
 /**
  * Paperclip is where work happens; NODE is only a front door. A request
  * becomes an issue assigned to Lead, and Lead's answer comment comes back
  * here. Same logic as ~/.local/bin/paperclip-mcp-slim paperclipAsk.
  */
-const API = (process.env.PAPERCLIP_API_URL ?? "http://127.0.0.1:3100/api").replace(/\/$/, "");
-const COMPANY = process.env.PAPERCLIP_COMPANY_ID ?? "ffaab782-ce21-4946-b86c-dbab054ddf1c";
-const LEAD = process.env.PAPERCLIP_LEAD_ID ?? "19db7bc5-ff7f-4b5c-b2c2-a1f2ad35085b";
 const TIMEOUT_MS = Number(process.env.PAPERCLIP_ASK_TIMEOUT ?? 600) * 1000;
+const POLL_MS = Number(process.env.PAPERCLIP_POLL_MS ?? 5000);
 const FINAL = new Set(["done", "cancelled", "blocked", "in_review"]);
 
 async function pc<T>(method: string, p: string, body?: unknown): Promise<T> {
-  const r = await fetch(API + p, {
+  const r = await fetch(paperclipSettings().api + p, {
     method,
     headers: body !== undefined ? { "content-type": "application/json" } : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
@@ -33,11 +32,12 @@ export function askPaperclip(prompt: string, source = "NODE app", meta: Record<s
   void (async () => {
     let iss: Issue;
     try {
-      iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, {
+      const cfg = paperclipSettings();
+      iss = await pc<Issue>("POST", `/companies/${cfg.company}/issues`, {
         title,
-        description: `${prompt}\n\n---\nFrom Matt via ${source}. Answer or do this, then post the final answer for Matt as a short plain-language comment on this issue and set the issue to done. Delegate if needed.`,
+        description: issueDescription(prompt, source, cfg),
         status: "todo",
-        assigneeAgentId: LEAD,
+        assigneeAgentId: cfg.lead,
       });
     } catch (e) {
       appendLine(job, `Could not reach Paperclip: ${(e as Error).message}`);
@@ -49,7 +49,7 @@ export function askPaperclip(prompt: string, source = "NODE app", meta: Record<s
     const t0 = Date.now();
     let last: string | null = null;
     while (Date.now() - t0 < TIMEOUT_MS) {
-      await new Promise((r) => setTimeout(r, 5000));
+      await new Promise((r) => setTimeout(r, POLL_MS));
       try {
         const st = (await pc<Issue>("GET", `/issues/${iss.id}`)).status ?? "";
         const cs = (await pc<Comment[]>("GET", `/issues/${iss.id}/comments`))
@@ -75,17 +75,18 @@ export interface AskResult { ok: boolean; issue: string; issueId: string; status
 /** paperclipAsk, waiting for the answer (same logic as paperclip-mcp-slim). */
 export async function askPaperclipWait(prompt: string, source: string, title?: string): Promise<AskResult> {
   const t = (title?.trim() || prompt.split("\n")[0] || "Request").slice(0, 90);
-  const iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, {
+  const cfg = paperclipSettings();
+  const iss = await pc<Issue>("POST", `/companies/${cfg.company}/issues`, {
     title: t,
-    description: `${prompt}\n\n---\nFrom Matt via ${source}. Answer or do this, then post the final answer for Matt as a short plain-language comment on this issue and set the issue to done. Delegate if needed.`,
+    description: issueDescription(prompt, source, cfg),
     status: "todo",
-    assigneeAgentId: LEAD,
+    assigneeAgentId: cfg.lead,
   });
   const ident = iss.identifier ?? iss.id;
   const t0 = Date.now();
   let last: string | null = null;
   while (Date.now() - t0 < TIMEOUT_MS) {
-    await new Promise((r) => setTimeout(r, 5000));
+    await new Promise((r) => setTimeout(r, POLL_MS));
     try {
       const st = (await pc<Issue>("GET", `/issues/${iss.id}`)).status ?? "";
       const cs = (await pc<Comment[]>("GET", `/issues/${iss.id}/comments`))

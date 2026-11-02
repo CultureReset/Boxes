@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { doorPublic, nodePublic } from "./mode.js";
 
 /** Machine-to-machine: the door's own machine proxy calls this NODE with its app token
  *  (~/.config/nodeos/app-token). Lets a second machine (MacBook, laptop) be plugged into the
@@ -17,15 +18,15 @@ function isAppToken(tok: string): boolean {
 
 /**
  * One login for NODE: the node-door session. The door sets `door_session`
- * (HttpOnly, Secure) on steve-ms-7c02...ts.net; cookies are per host, not per
+ * (HttpOnly, Secure) on the owner's tailnet host; cookies are per host, not per
  * port, so every NODE port (14443, frame proxies) receives it as first-party.
  * Requests that arrive through `tailscale serve` / a remote address must carry
  * a valid door session. The PC's own screen (loopback, no proxy headers) is
  * trusted as before.
  */
 const DOOR = (process.env.NODEOS_DOOR_URL ?? "http://127.0.0.1:7700").replace(/\/$/, "");
-export const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
-export const NODE_PUBLIC = process.env.NODEOS_PUBLIC_ORIGIN ?? "https://steve-ms-7c02.tail1af4f2.ts.net:14443";
+export const DOOR_PUBLIC = doorPublic();
+export const NODE_PUBLIC = nodePublic();
 
 const cache = new Map<string, { email: string | null; until: number }>();
 
@@ -75,17 +76,18 @@ export async function doorUser(req: http.IncomingMessage): Promise<string | null
 export async function requireDoor(req: http.IncomingMessage, res: http.ServerResponse, framed = false): Promise<boolean> {
   if (!isRemote(req)) return true;
   if (await doorUser(req)) return true;
-  const login = `${DOOR_PUBLIC}/login?return=${encodeURIComponent(NODE_PUBLIC + "/")}`;
+  // No door URL (customer mode without a per-customer door): nowhere to send the browser.
+  const login = DOOR_PUBLIC ? `${DOOR_PUBLIC}/login?return=${encodeURIComponent(NODE_PUBLIC + "/")}` : "";
   const url = req.url ?? "/";
   if (!framed && url.startsWith("/api/")) {
     res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" });
-    res.end(JSON.stringify({ error: "sign in first", login }));
-  } else if (!framed && req.method === "GET") {
+    res.end(JSON.stringify(login ? { error: "sign in first", login } : { error: "sign in first" }));
+  } else if (!framed && req.method === "GET" && login) {
     res.writeHead(302, { location: login, "cache-control": "no-store" });
     res.end();
   } else {
     res.writeHead(401, { "content-type": "text/html; charset=utf-8", "cache-control": "no-store" });
-    res.end(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width"><body style="font-family:system-ui;background:#0b0f14;color:#e6e9ef;display:grid;place-items:center;height:100vh;margin:0"><p>Sign in to NODE first. <a style="color:#0a84ff" target="_top" href="${login}">Sign in</a></p>`);
+    res.end(`<!doctype html><meta charset=utf-8><meta name=viewport content="width=device-width"><body style="font-family:system-ui;background:#0b0f14;color:#e6e9ef;display:grid;place-items:center;height:100vh;margin:0"><p>Sign in to NODE first.${login ? ` <a style="color:#0a84ff" target="_top" href="${login}">Sign in</a>` : ""}</p>`);
   }
   return false;
 }

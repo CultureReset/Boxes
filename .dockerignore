@@ -1,0 +1,26 @@
+# Build context for customer/Dockerfile (docker build -f customer/Dockerfile .)
+.git
+**/node_modules
+**/dist
+**/.next
+.env
+.env.*
+*.log
+
+# Backup copies of source files and old build outputs
+**/*.bak-*
+**/dist.bak-*
+
+# The platform owner's own host configuration: never part of a customer image
+config
+box
+services
+spec
+docs
+
+# Generated per-customer state and secrets
+customers
+
+# Only the manifest of this workspace is needed, so `npm ci` can resolve the lockfile
+apps/menu/*
+!apps/menu/package.json

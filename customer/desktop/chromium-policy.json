@@ -1,0 +1,8 @@
+{
+  "URLBlocklist": ["file://*", "view-source:*", "chrome://inspect*"],
+  "PasswordManagerEnabled": true,
+  "DefaultBrowserSettingEnabled": false,
+  "BrowserSignin": 0,
+  "MetricsReportingEnabled": false,
+  "DownloadDirectory": "/profile/Downloads"
+}

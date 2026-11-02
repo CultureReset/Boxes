@@ -1,5 +1,6 @@
 import type http from "node:http";
 import { spawn } from "node:child_process";
+import { hostedMode, HOSTED_MESSAGE } from "./mode.js";
 
 /**
  * Live view of one desktop window as MJPEG (multipart/x-mixed-replace), so the
@@ -19,6 +20,7 @@ function grab(address: string): Promise<Buffer | null> {
 }
 
 export async function streamWindow(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
+  if (hostedMode()) { res.writeHead(501, { "content-type": "text/plain" }); res.end(HOSTED_MESSAGE); return; }
   const u = new URL(req.url ?? "", "http://x");
   const address = u.searchParams.get("address") ?? "";
   const once = u.searchParams.get("once") === "1";

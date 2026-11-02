@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { run, runJson } from "../exec.js";
+import { hostedMode, HOSTED_MESSAGE } from "../mode.js";
 
 /**
  * What is running on this computer, read-only: systemd --user units, docker
@@ -41,6 +42,8 @@ export interface HealthReport {
 }
 
 export interface ServicesReport {
+  /** Set in hosted mode: this computer's services are not visible from a customer container. */
+  unavailable?: string;
   services: ServiceEntry[];
   ports: PortEntry[];
   health: HealthReport;
@@ -110,6 +113,7 @@ async function listeningPorts(served: Map<number, string>): Promise<PortEntry[]>
 const HEALTH_FILE = path.join(os.homedir(), ".local/state/node-health/status.json");
 
 export async function healthReport(): Promise<HealthReport> {
+  if (hostedMode()) return { checkedAt: null, ok: false, stale: true, failures: 0, checks: [] };
   try {
     const j = JSON.parse(await readFile(HEALTH_FILE, "utf8")) as { checkedAt: string; epoch: number; ok: boolean; failures: number; checks: HealthCheck[] };
     const stale = Date.now() / 1000 - j.epoch > 15 * 60;
@@ -120,6 +124,7 @@ export async function healthReport(): Promise<HealthReport> {
 }
 
 export async function servicesReport(): Promise<ServicesReport> {
+  if (hostedMode()) return { unavailable: HOSTED_MESSAGE, services: [], ports: [], health: await healthReport() };
   const [units, containers, served, health] = await Promise.all([systemdUnits(), dockerContainers(), servedPorts(), healthReport()]);
   return { services: [...units, ...containers], ports: await listeningPorts(served), health };
 }

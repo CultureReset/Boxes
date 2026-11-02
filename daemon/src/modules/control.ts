@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../exec.js";
 import { HttpError } from "../router.js";
+import { hostedMode, HOSTED_MESSAGE } from "../mode.js";
 
 /**
  * Start / stop / restart the services listed in config/services-control.json.
@@ -42,6 +43,7 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 const FILE = process.env.NODEOS_CONTROL_FILE ?? path.resolve(here, "../../../config/services-control.json");
 
 async function entries(): Promise<ControlEntry[]> {
+  if (hostedMode()) return [];
   const j = JSON.parse(await readFile(FILE, "utf8")) as { services: ControlEntry[] };
   return j.services.filter((s) => (s.kind === "systemd" || s.kind === "docker") && Array.isArray(s.units) && s.units.length > 0);
 }
@@ -76,6 +78,7 @@ export async function controlOne(id: string): Promise<ControlStatus> {
 }
 
 export async function controlAction(id: string, action: string): Promise<{ ok: boolean; status?: ControlStatus; error?: string }> {
+  if (hostedMode()) return { ok: false, error: HOSTED_MESSAGE };
   if (action !== "start" && action !== "stop" && action !== "restart") throw new HttpError(400, "action must be start, stop or restart");
   const e = (await entries()).find((x) => x.id === id);
   if (!e) throw new HttpError(404, `Unknown service ${id}`);

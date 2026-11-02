@@ -1,3 +1,4 @@
+import "./startup.js"; // first: a customer container with missing settings stops here, before anything else runs
 import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
 import { startFrameProxies } from "./frameproxy.js";
@@ -38,6 +39,7 @@ import { listNotifications, markRead, clearAll, sendDesktop, watchDbus } from ".
 import { backgroundPath } from "./modules/status.js";
 import type { Automation, CalendarEvent } from "./types.js";
 import { platformConfig, savePlatformConfig, isConnected } from "./platform/config.js";
+import { ownerName, doorPublic } from "./mode.js";
 import { platform, qs } from "./platform/client.js";
 import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
@@ -304,7 +306,7 @@ api.get("/api/agents", async () => ({ providers: await listProviders(), personas
 api.post("/api/chats/:id/paperclip", async ({ params, body }) => {
   const c = await getChat(params.id);
   const note = str(obj(body).text, "text", { optional: true, max: 8000 }) ?? "";
-  const convo = (c?.messages ?? []).filter((m) => !m.error).slice(-12).map((m) => `${m.role === "user" ? "Matt" : "Assistant"}: ${m.content}`).join("\n\n");
+  const convo = (c?.messages ?? []).filter((m) => !m.error).slice(-12).map((m) => `${m.role === "user" ? ownerName() : "Assistant"}: ${m.content}`).join("\n\n");
   const prompt = (note ? note + "\n\n" : "") + "Task from this NODE chat:\n\n" + convo;
   return askPaperclip(prompt.slice(0, 20_000), "a NODE chat", { chat: params.id });
 });
@@ -403,7 +405,7 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
 const DOOR = process.env.NODEOS_DOOR ?? "http://127.0.0.1:7700";
 // The door's public HTTPS address. Browsers on a raw tailnet IP over plain http are sent there:
 // the door's session cookie is "Secure; SameSite=None", which Safari drops on http, so sign-in "worked" then bounced.
-const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
+const DOOR_PUBLIC = doorPublic();
 function plainHttp(req: http.IncomingMessage): boolean {
   const xfp = String(req.headers["x-forwarded-proto"] ?? "");
   return !xfp.includes("https") && !(req.socket as unknown as { encrypted?: boolean }).encrypted;
@@ -434,7 +436,7 @@ function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
 
 const server = http.createServer(async (req, res) => {
   // Raw-IP plain-http page loads go to the one public door (same path), where sign-in sticks.
-  if (rawIpHost(req) && plainHttp(req) && (req.method === "GET" || req.method === "HEAD") && String(req.headers.accept ?? "").includes("text/html")) {
+  if (DOOR_PUBLIC && rawIpHost(req) && plainHttp(req) && (req.method === "GET" || req.method === "HEAD") && String(req.headers.accept ?? "").includes("text/html")) {
     res.writeHead(301, { Location: DOOR_PUBLIC + (req.url ?? "/"), "Cache-Control": "no-store" }); res.end(); return;
   }
   // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.

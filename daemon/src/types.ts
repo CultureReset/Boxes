@@ -113,4 +113,6 @@ export interface Status {
   background: string | null;
   uptimeSeconds: number;
   capabilities: Record<string, boolean>;
+  /** Present only in hosted (customer) mode: what this copy of NODE does not have. */
+  hosted?: { mode: "home" | "customer"; message: string; unavailable: readonly string[] };
 }

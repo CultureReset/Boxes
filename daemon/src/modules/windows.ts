@@ -4,6 +4,7 @@ import { has, run } from "../exec.js";
 import { bus } from "../events.js";
 import { demoWindows } from "../demo.js";
 import { isDemo } from "./status.js";
+import { hostedMode } from "../mode.js";
 import { appIdForWindow } from "./apps.js";
 import type { WindowEntry } from "../types.js";
 
@@ -22,6 +23,7 @@ interface HyprClient {
 }
 
 export async function listWindows(): Promise<WindowEntry[]> {
+  if (hostedMode()) return [];
   if (await isDemo()) return demoWindows;
   if (!(await has("hyprctl")) && await has("wmctrl")) {
     const r = await run("wmctrl", ["-lpGx"]);
@@ -71,6 +73,7 @@ export async function listWindows(): Promise<WindowEntry[]> {
 }
 
 export async function focusWindow(address: string): Promise<boolean> {
+  if (hostedMode()) return false;
   if (await isDemo()) return true;
   if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address])).ok;
   const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
@@ -78,6 +81,7 @@ export async function focusWindow(address: string): Promise<boolean> {
 }
 
 export async function closeWindow(address: string): Promise<boolean> {
+  if (hostedMode()) return false;
   if (await isDemo()) return true;
   if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address])).ok;
   const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
@@ -86,6 +90,7 @@ export async function closeWindow(address: string): Promise<boolean> {
 
 /** Bring the NODE shell back on screen: focus its window, or the home workspace. */
 export async function goHome(): Promise<boolean> {
+  if (hostedMode()) return false;
   if (await isDemo()) return true;
   if (!(await has("hyprctl")) && await has("wmctrl")) {
     const r = await run("wmctrl", ["-xa", SHELL_CLASS]);
@@ -101,6 +106,7 @@ export async function goHome(): Promise<boolean> {
  * so the shell's "Continue" row updates the instant an app opens or closes.
  */
 export async function watchHyprland(): Promise<void> {
+  if (hostedMode()) return;
   if (!(await has("hyprctl"))) return;
   const sig = process.env.HYPRLAND_INSTANCE_SIGNATURE;
   const runtime = process.env.XDG_RUNTIME_DIR ?? `/run/user/${process.getuid?.() ?? 1000}`;

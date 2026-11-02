@@ -4,6 +4,7 @@ import { HOME } from "../paths.js";
 import { demoFiles } from "../demo.js";
 import { isDemo } from "./status.js";
 import { HttpError } from "../router.js";
+import { hostedMode } from "../mode.js";
 import type { FileEntry, FileKind } from "../types.js";
 
 const KIND_BY_EXT: Record<string, FileKind> = {
@@ -30,7 +31,8 @@ export function kindOf(name: string, isDir: boolean): FileKind {
 export function resolveUserPath(p: string): string {
   const expanded = p === "~" || p === "" ? HOME : p.startsWith("~/") ? path.join(HOME, p.slice(2)) : p;
   const abs = path.resolve(expanded);
-  const allowed = [HOME, "/media", "/run/media", "/mnt"];
+  // Hosted: only the container's own home (the customer's data volume), never host mounts.
+  const allowed = hostedMode() ? [HOME] : [HOME, "/media", "/run/media", "/mnt"];
   if (!allowed.some((root) => abs === root || abs.startsWith(root + path.sep))) throw new HttpError(403, "Path outside your files");
   return abs;
 }

@@ -3,6 +3,7 @@ import { has, run } from "../exec.js";
 import { mkdtemp, readFile, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { hostedMode } from "../mode.js";
 
 /**
  * The box's voice.
@@ -159,6 +160,7 @@ export async function speak(text: string): Promise<Speech | null> {
 
 /** Say it out loud on this machine's own speakers. */
 export async function sayAloud(text: string): Promise<boolean> {
+  if (hostedMode()) return false; // there are no speakers in a container
   const s = await speak(text);
   if (!s) return false;
   const player = (await has("paplay")) ? "paplay" : (await has("aplay")) ? "aplay" : null;
