@@ -38,6 +38,8 @@ apps, files and meetings are sample data. The banner says so on screen.*
 
 ## Anything that changes something goes through the kernel
 
+> **This section describes the default branch only.** The running tree on the box is `sync/steve-2026-10-31`, and that tree has **no kernel gate**: `daemon/src/platform/decide.ts`, `gate.ts`, `kernel.ts`, `ask.ts`, the phone capability, the route registry and `module.manifest.json` are deleted there, and nothing in its `daemon/` refers to port 8764. Asks there go to the Paperclip "Lead" agent and a LiteLLM gateway instead.
+
 The ask bar does not act on its own. `daemon/src/platform/decide.ts` is the one
 door: a sentence goes to core (`NEXTGENT_CORE_URL`, default
 `http://127.0.0.1:8764`) and is decided by the owner's rules there, ALLOW, ASK
@@ -298,9 +300,8 @@ inherited `Linux-` desktop layer and is not part of the business path above.
 ## What is not done
 
 - `services/voice/` — the cloud call path — still writes to the database
-  directly. It holds a Supabase key (`config/supabase.js`) and has 66
-  `.from('…')` query sites across 10 files (counted with grep). Its own README
-  lists only 4 files and 24 sites, and has no `package.json` here. The on-box
+  directly. It holds a Supabase key (`config/supabase.js`) and has 68
+  `.from('…')` query sites across 12 JS files (re-counted with grep on 2026-11-02: 66 in the 10 service and worker files, 1 each in `config/database.js` and `config/supabase.js`). An earlier README said 24 sites in 4 files; that was wrong. The folder has no `package.json` here. The on-box
   path in `daemon/src/voice/` does not have this problem; it goes through
   `platform/`.
 - `apps/menu/` still calls daemon routes that do not exist (`POST
@@ -324,10 +325,10 @@ inherited `Linux-` desktop layer and is not part of the business path above.
 
 ## Known gaps
 
-- **Default branch is not the newest.** `sync/steve-2026-10-31` is one commit ahead (230 files changed: a working-tree sync from a machine named `steve-MS-7C02`, including about 150 `.bak-*` backup files). `node-foundation/apps/boxes` comes from it. The monorepo copy in `nextgent-box/boxes/` and the Ghost installer's pin (`claude/repo-code-analysis-y4n1k7`) are older.
-- **`sync/steve-2026-10-31` is on a PUBLIC repository** and its `config/services-control.json` lists 18 services and contains the machine's tailnet hostname. Consider making the repo private or removing that file from history.
+- **Default branch is not the newest, and it is not what runs.** `sync/steve-2026-10-31` is one commit ahead (230 files changed: a working-tree sync from a machine named `steve-MS-7C02`, including 150 `.bak-*` backup files). That branch is **open pull request #3** into this default branch, so the running box tree equals PR #3, on a public repository. Its tree (362 files) is byte-identical to `node-foundation/apps/boxes` (`diff -rq` of both extracts is empty), and it has no kernel gate (see above). It adds `doorauth.ts` (session-cookie login for non-loopback requests); the default branch daemon has no authentication on its 109 routes beyond binding to `127.0.0.1`. The monorepo copy in `nextgent-box/boxes/` and the Ghost installer's pin (`claude/repo-code-analysis-y4n1k7`) are older.
+- **`sync/steve-2026-10-31` is on a PUBLIC repository** (`gh api` reports `private: false`) and its `config/services-control.json` lists 18 services and contains the machine's tailnet hostname. Consider making the repo private or removing that file from history.
 - **`services/voice/` breaks the architecture rule.** It reads `SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_KEY` from its environment and queries a database directly (`config/supabase.js`, `config/database.js`, several services). It is a separate cloud-side Twilio service, not started by the Ghost installer, and it never calls the box's `/api/voice/*`. Credentials must come from the environment; do not commit them.
-- **Unmerged branch:** `claude/agent-ecosystem-architecture-nzexu1` holds `pairing.ts` and `creds.ts` for `/api/nodes/pair`, but also moves Jarvis to the cloud, which the design rejects.
+- **Unmerged branch:** `claude/agent-ecosystem-architecture-nzexu1` (6 commits ahead) holds `pairing.ts` and `creds.ts` for `/api/nodes/pair`, but also moves Jarvis to the cloud, which the design rejects. Its pairing flow calls `/api/nodes/pair/start`, `/pair` and `/pair/poll` on `gcr-api-clean`, whose `routes/nodes.js` has no such routes, so the flow has nothing to talk to. The branch also imports `@nextgent/app-engine`, which was not found elsewhere (not verified further).
 - The ask bar's fallback to a coding-agent CLI or local model does not go through core.
 - `box/image/stage-cybercheck` is a Raspberry Pi image; do not run it on a Ghost box (a second adb owner).
 - No evidence in this repo of the TV running on a real box; screenshots are demo mode with sample data.
@@ -335,3 +336,17 @@ inherited `Linux-` desktop layer and is not part of the business path above.
 ## Related repos
 
 `nextgent-platform` (core), `nextgent-ghost-image` (installer), `nextgent-box` (monorepo copy), `gcr-api-clean` (platform API), `node-foundation` (newer copy under `apps/boxes`), `Linux-` (older desktop layer this replaced), `ghost-ai` (origin of `services/voice`).
+
+## Inside this repo (from the code)
+
+From a code read on 2026-11-02 of the default branch (`ae6e0ad`) and, where stated, of `sync/steve-2026-10-31` (`30dc63a`). Nothing was installed or run, so runtime claims are **unverified**.
+
+- **Shape (default branch):** 205 files, about 22,200 lines (74 `.ts`, 48 `.tsx`, 21 `.js`). `daemon/` 63 files (Node HTTP daemon, TypeScript, no runtime dependencies), `shell/` 56 (React / Vite TV UI), `apps/menu/` 22 (Next.js menu app), `box/` 29 (Pi image, units, Hyprland rules, bench compose, device agent), `services/voice/` 15 files / 4,362 lines (old Express voice and SMS service), `spec/` 7 design notes (not code), `docs/` 6.
+- **Starts:** npm workspaces. `npm run build` (tsc + vite); `npm start` runs `node daemon/dist/index.js` on port 7770 (`NODEOS_HOST` default `127.0.0.1`). Dev: daemon 7770, shell 5173, menu 3000. No root Dockerfile and **no CI workflow**. Env names read: `NODEOS_PORT/_HOST/_API_URL/_API_TOKEN/_LLM_URL/_LLM_MODEL/_STT_MODEL/_TTS_*`, `NEXTGENT_CORE_URL`, `NEXTGENT_CORE_TOKEN`, `NEXTGENT_ANDROID_SERIAL`, plus display variables.
+- **HTTP:** 109 unique `/api/...` routes in `daemon/src/router.ts`: status, apps, store, files, audio, bluetooth, wifi, display, power, windows, themes, notifications, calendar, automations, jobs, agents (`/api/agents/ask`), voice, weather, worlds, read-only business answers (one POST for a menu item), `/api/kernel*`, `/api/ask`, `/api/capability`, `/api/home`, `/api/events` (SSE). `routes/registry.ts` is a loader that nothing calls. On the sync branch there are 121 routes, plus chat, control, services, winstream, frameproxy and appbridge modules and a panel for about 20 services.
+- **UI:** 7 screens: Home, Apps, Agents, Files, Calendar, Automations, settings. `demo.ts` supplies sample data when no desktop session exists; the README screenshots are demo mode.
+- **Data:** the daemon has no database; it keeps files under XDG directories. `services/voice/` is a direct Supabase client (about 15 tables, e.g. `voice_notes`, `phone_calls`, `menu_items`, `users`, `reviews`, `businesses`), with Redis, Twilio and OpenAI clients; nothing in `daemon/` or `box/` starts or references it, so it is dead here and breaks the one-database-owner rule. Credentials come from the environment (`SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`); none are committed.
+- **Integrations:** core on 8764, the platform API at `NODEOS_API_URL` (`gcr-api-clean`), `api.x.ai`, `api.perplexity.ai`, `api.open-meteo.com`, `ipapi.co`, `flathub.org`, a local LLM, adb / hyprctl / wmctrl tools. Installed by `nextgent-ghost-image` as the `boxes` block (unit `ghost-tv`); the manifest health check is `http://127.0.0.1:7770/api/status`.
+- **Tests:** `npm test` runs `node --test` over 2 files (`decide.test.ts`, `gate.test.ts`; 8 cases). No shell tests, no CI. Not run here. The agent-ecosystem branch adds 3 more test files.
+- **Sync branch vs default:** 230 files changed (+30,679 / -2,266), 150 of them `*.bak-*` editor backups. It hard-codes the owner's tailnet machine name and a Paperclip company id and lead-agent id, and reads a LiteLLM master key from `~/.config/litellm/litellm.env` at call time (the value is not committed). No private keys or tokens were found by pattern scan in the default, sync or ecosystem trees.
+- **Stubbed or dead:** `services/voice/`; `routes/registry.ts` loader; `apps/menu/` calls routes the daemon lacks; `box/image/` is the Pi build; fan-out of business facts is not in this repo. 0 TODO / FIXME markers in `daemon/` and `shell/`.
