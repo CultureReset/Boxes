@@ -36,12 +36,12 @@ RUN npm test --workspace=daemon
 # Test files are not shipped (they quote the owner's values on purpose).
 RUN find daemon/dist -name '*.test.js' -delete
 
-# Replace the compiled platform-owner defaults (owner name, Paperclip company and
-# lead ids, tailnet hostnames, host upload path) with empty strings, then fail the
-# build if any of them is still anywhere in the daemon output. The keys must match
-# daemon/src/homeDefaults.ts; a daemon test checks that they do.
-RUN printf '%s\n' 'export const HOME_DEFAULTS = { ownerName: "", paperclipCompany: "", paperclipLead: "", doorPublic: "", nodePublic: "", uploadDir: "" };' > daemon/dist/homeDefaults.js \
- && ! grep -rIlE 'ffaab782-ce21|19db7bc5-ff7f|tail1af4f2|steve-ms|/home/steve|/hdd/home|From Matt' daemon/dist --include='*.js'
+# Empty the compiled platform-owner defaults (owner name, Paperclip company and lead ids, tailnet
+# host names, host paths), then FAIL THE BUILD if any of them, or a host name or path derived from
+# them, is still anywhere in the daemon output or in the shell bundle. The values are read from
+# daemon/src/homeDefaults.ts at build time, so they are written down in no other file.
+COPY customer/scrub.mjs customer/scrub.mjs
+RUN node customer/scrub.mjs
 
 # ---- run --------------------------------------------------------------------
 FROM ${NODE_IMAGE} AS run

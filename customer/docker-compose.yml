@@ -11,7 +11,9 @@
 #
 #   host loopback :NODE_HOST_PORT --> edge --(inner, internal)--> node
 #                                      |
-#                                      +--(edge net)--> allow-listed hosts only (EDGE_ALLOW)
+#                                      +--(edge net)--> allow-listed hosts only (EDGE_ALLOW), port 443
+#                                      +--(edge net)--> Paperclip, through the scoped gateway only:
+#                                                       this customer's company, their own issues
 #
 #   [profile desktop]  host loopback :DESKTOP_HOST_PORT --> desktop (noVNC)
 #                      desktop --(web net)--> the internet; the host firewall rules
@@ -62,19 +64,24 @@ services:
       NODEOS_OWNER_NAME: ${NODEOS_OWNER_NAME:?}
       NODEOS_BUSINESS_NAME: ${NODEOS_BUSINESS_NAME:?}
       NODEOS_SLUG: ${NODEOS_SLUG:?}
-      PAPERCLIP_API_URL: ${PAPERCLIP_API_URL:?}
+      # Paperclip is reached through the edge gateway, never directly (the real URL is the edge's).
+      PAPERCLIP_API_URL: http://edge:8890/api
       PAPERCLIP_COMPANY_ID: ${PAPERCLIP_COMPANY_ID:?}
       PAPERCLIP_LEAD_ID: ${PAPERCLIP_LEAD_ID:?}
       NODEOS_API_URL: ${NODEOS_API_URL:?}
       # Secrets arrive as files, never as environment values.
       NODEOS_APP_TOKEN_FILE: /run/secrets/app_token
       NODEOS_API_TOKEN_FILE: /run/secrets/api_token
+      # Sent as "Authorization: Bearer" on every Paperclip call. Customer mode refuses to start
+      # without a key unless PAPERCLIP_ALLOW_ANON=1 (UNSAFE; only for a Paperclip that has no auth).
+      PAPERCLIP_API_KEY_FILE: /run/secrets/paperclip_api_key
+      PAPERCLIP_ALLOW_ANON: ${PAPERCLIP_ALLOW_ANON:-}
       # The only way out is the proxy (Node 22.21+ honours these with NODE_USE_ENV_PROXY).
       NODE_USE_ENV_PROXY: "1"
       HTTP_PROXY: http://edge:8888
       HTTPS_PROXY: http://edge:8888
       NO_PROXY: 127.0.0.1,localhost,edge,desktop
-    secrets: [app_token, api_token]
+    secrets: [app_token, api_token, paperclip_api_key]
     volumes:
       - node-data:/data
     tmpfs:
@@ -100,12 +107,20 @@ services:
     environment:
       EDGE_ALLOW: ${EDGE_ALLOW:?}
       EDGE_UPSTREAM: node:7770
+      # The gateway lets the node reach exactly: POST/GET /companies/<this id>/issues and GET of
+      # issues this container created. Everything else on Paperclip is 403.
+      PAPERCLIP_UPSTREAM_URL: ${PAPERCLIP_API_URL:?}
+      PAPERCLIP_COMPANY_ID: ${PAPERCLIP_COMPANY_ID:?}
+      EDGE_STATE_DIR: /state
     ports:
       - "127.0.0.1:${NODE_HOST_PORT:?}:7770"
+    volumes:
+      # The ids of the issues this customer created (small, bounded); survives restarts.
+      - edge-state:/state
     tmpfs:
       - /tmp:size=8m,mode=1777,noexec,nosuid,nodev
     healthcheck:
-      test: ["CMD-SHELL", "nc -z 127.0.0.1 7770 && nc -z 127.0.0.1 8888"]
+      test: ["CMD-SHELL", "nc -z 127.0.0.1 7770 && nc -z 127.0.0.1 8888 && nc -z 127.0.0.1 8890"]
       interval: 30s
       timeout: 5s
       retries: 3
@@ -164,6 +179,7 @@ networks:
 
 volumes:
   node-data: {}
+  edge-state: {}
   browser-profile: {}
 
 secrets:
@@ -171,5 +187,7 @@ secrets:
     file: ${SECRETS_DIR:?}/app_token
   api_token:
     file: ${SECRETS_DIR:?}/api_token
+  paperclip_api_key:
+    file: ${SECRETS_DIR:?}/paperclip_api_key
   vnc_password:
     file: ${SECRETS_DIR:?}/vnc_password

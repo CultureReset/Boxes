@@ -111,6 +111,8 @@ export interface Status {
   background: string | null;
   uptimeSeconds: number;
   capabilities: Record<string, boolean>;
+  /** Whose NODE this is and its public MCP endpoint (empty when there is none). Configuration, never a secret. */
+  config: { ownerName: string; businessName: string; mcpUrl: string };
 }
 
 export interface FeatureStatus {

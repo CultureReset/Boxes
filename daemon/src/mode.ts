@@ -66,6 +66,18 @@ export function nodePublic(env: Env = process.env): string {
   return env.NODEOS_PUBLIC_ORIGIN ?? (isCustomerMode(env) ? "" : HOME_DEFAULTS.nodePublic);
 }
 
+/** Public MCP endpoint shown in the shell: NODEOS_MCP_URL, else <door>/mcp, else empty (customer mode with no door yet). */
+export function mcpPublic(env: Env = process.env): string {
+  const explicit = (env.NODEOS_MCP_URL ?? "").trim();
+  const v = explicit || (doorPublic(env) ? `${doorPublic(env)}/mcp` : "");
+  return /^https?:\/\/[^\s]+$/i.test(v) ? v : "";
+}
+
+/** What the shell is told about whose NODE this is. Names are not secrets; nothing here is a credential. */
+export function shellConfig(env: Env = process.env): { ownerName: string; businessName: string; mcpUrl: string } {
+  return { ownerName: ownerName(env), businessName: businessName(env), mcpUrl: mcpPublic(env) };
+}
+
 /** Where uploads go. Home keeps the owner's disk; hosted mode never touches a host path. */
 export function uploadDirDefault(dataDir: string, env: Env = process.env): string {
   if (env.NODEOS_UPLOAD_DIR) return env.NODEOS_UPLOAD_DIR;
@@ -106,6 +118,69 @@ export function paperclipSettings(env: Env = process.env): PaperclipSettings {
   };
 }
 
+// ---- Paperclip credential ------------------------------------------------
+//
+// The key is sent as `Authorization: Bearer <key>` on every Paperclip call.
+// It is NOT part of PaperclipSettings (which is passed around and may be
+// printed), it is read once at start, it is never logged, and it is scrubbed
+// from the environment handed to child processes (see exec.ts).
+//
+// ASSUMED, not confirmed from code: that the Paperclip server checks such a
+// key. If it ignores the header, this changes nothing on the wire that matters;
+// scope is enforced by the edge gateway (customer/edge), not by this key.
+
+const KEY_SHAPE = /^[\x21-\x7e]{1,4096}$/; // one printable-ASCII token: no spaces, no newlines
+
+/** The key from PAPERCLIP_API_KEY, else the file named by PAPERCLIP_API_KEY_FILE. A problem names the variable, never the value. */
+function readPaperclipKey(env: Env): { key?: string; problem?: string } {
+  const direct = (env.PAPERCLIP_API_KEY ?? "").trim();
+  const file = (env.PAPERCLIP_API_KEY_FILE ?? "").trim();
+  let key = direct;
+  let from = "PAPERCLIP_API_KEY";
+  if (!key && file) {
+    from = "PAPERCLIP_API_KEY_FILE";
+    try {
+      key = readFileSync(file, "utf8").trim();
+    } catch {
+      return { problem: "PAPERCLIP_API_KEY_FILE cannot be read" };
+    }
+    if (!key) return { problem: "PAPERCLIP_API_KEY_FILE is empty" };
+  }
+  if (!key) return {};
+  if (!KEY_SHAPE.test(key)) return { problem: `${from} must be a single printable token (no spaces or line breaks)` };
+  return { key };
+}
+
+let keyCache: { key?: string } | undefined;
+
+/** Reads the key once (call at start). Later calls reuse it, so the file is not re-read per request. */
+export function loadPaperclipKey(env: Env = process.env): boolean {
+  if (env === process.env) keyCache = { key: readPaperclipKey(env).key };
+  return Boolean(readPaperclipKey(env).key);
+}
+
+/** For tests: forget the cached key so the next call reads the environment again. */
+export function resetPaperclipKeyCache(): void {
+  keyCache = undefined;
+}
+
+/** `Bearer <key>` for the Paperclip client, or undefined when no key is configured. */
+export function paperclipAuthHeader(env: Env = process.env): string | undefined {
+  const key = env === process.env ? (keyCache ??= { key: readPaperclipKey(env).key }).key : readPaperclipKey(env).key;
+  return key ? `Bearer ${key}` : undefined;
+}
+
+/** Replaces the key, if it appears, in text that may be shown to a user or logged. */
+export function redactPaperclipKey(text: string, env: Env = process.env): string {
+  const key = env === process.env ? keyCache?.key ?? readPaperclipKey(env).key : readPaperclipKey(env).key;
+  return key ? text.split(key).join("[redacted]") : text;
+}
+
+/** True when customer mode was told, explicitly, to call Paperclip without a credential. */
+export function paperclipAnonAllowed(env: Env = process.env): boolean {
+  return (env.PAPERCLIP_ALLOW_ANON ?? "").trim() === "1";
+}
+
 /**
  * The text Lead reads. Home mode is byte-for-byte what it always was; customer
  * mode names the customer's owner and business instead.
@@ -143,7 +218,21 @@ export function customerEnvProblems(env: Env = process.env): string[] {
   for (const name of ["PAPERCLIP_COMPANY_ID", "PAPERCLIP_LEAD_ID"] as const) {
     if (own.includes((env[name] ?? "").trim().toLowerCase())) problems.push(`${name} is the platform owner's own id; each customer needs their own`);
   }
+  // Paperclip credential. A missing key is an error, not a quiet fallback to "anyone may call".
+  const k = readPaperclipKey(env);
+  if (k.problem) problems.push(k.problem);
+  const anon = (env.PAPERCLIP_ALLOW_ANON ?? "").trim();
+  if (anon && anon !== "1") problems.push("PAPERCLIP_ALLOW_ANON must be 1 when set");
+  if (!k.key && !k.problem && anon !== "1") {
+    problems.push("PAPERCLIP_API_KEY or PAPERCLIP_API_KEY_FILE is required in customer mode (PAPERCLIP_ALLOW_ANON=1 skips this, UNSAFE: Paperclip is then called with no credential)");
+  }
   return problems;
+}
+
+/** A line to print at start when customer mode runs without a Paperclip credential on purpose. */
+export function anonWarning(env: Env = process.env): string | null {
+  if (!isCustomerMode(env) || readPaperclipKey(env).key || !paperclipAnonAllowed(env)) return null;
+  return "WARNING: PAPERCLIP_ALLOW_ANON=1 and no Paperclip key: Paperclip is called with no credential. UNSAFE; anything that can reach Paperclip can act as this customer.";
 }
 
 export class CustomerConfigError extends Error {

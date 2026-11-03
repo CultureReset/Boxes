@@ -9,7 +9,7 @@ import { networkState } from "./network.js";
 import { bluetoothState } from "./bluetooth.js";
 import { brightnessState } from "./display.js";
 import { updatesCount } from "./packages.js";
-import { hostedMode, hostedInfo } from "../mode.js";
+import { hostedMode, hostedInfo, shellConfig } from "../mode.js";
 
 async function battery(): Promise<Status["battery"]> {
   if (hostedMode()) return null; // /sys here is the host's hardware, not the customer's
@@ -105,6 +105,7 @@ export async function status(): Promise<Status> {
     background: bg,
     uptimeSeconds: os.uptime(),
     capabilities: caps,
+    config: shellConfig(),
     ...(hostedInfo() ? { hosted: hostedInfo()! } : {}),
   };
 }

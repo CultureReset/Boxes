@@ -139,7 +139,7 @@ export async function ask(prompt: string, persona = "auto", providerId?: string,
   if (world.agents && persona !== "auto" && !world.agents.includes(persona)) persona = "general";
   if (persona === "auto" || !PERSONAS[persona]) persona = route(prompt, world.agents);
   const personaDef = PERSONAS[persona] ?? PERSONAS.general;
-  // Matt's design: every prompt-box / Agent / "Help me build" request goes to
+  // The owner's design: every prompt-box / Agent / "Help me build" request goes to
   // Paperclip as an issue for Lead. Set NODEOS_AGENT_DIRECT=1 for the old path.
   if (process.env.NODEOS_AGENT_DIRECT !== "1") return askPaperclip(prompt, "the NODE app", { persona, world: world.id });
   const job = createJob("agent", prompt.slice(0, 80), { persona, provider: providerId, world: world.id });

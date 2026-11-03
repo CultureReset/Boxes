@@ -10,7 +10,9 @@
     "build": "npm run build --workspace=daemon && npm run build --workspace=shell",
     "typecheck": "npm run typecheck --workspace=daemon && npm run typecheck --workspace=shell",
     "start": "node daemon/dist/index.js",
-    "test": "npm test --workspace=daemon"
+    "test": "npm test --workspace=daemon",
+    "test:edge": "node --test customer/edge/edge.test.mjs",
+    "test:all": "npm test && npm run test:edge"
   },
   "engines": { "node": ">=20" },
   "license": "MIT"

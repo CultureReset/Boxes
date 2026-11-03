@@ -33,6 +33,14 @@ export async function has(cmd: string): Promise<boolean> {
   return found;
 }
 
+/** Secrets the daemon holds for itself; child processes (agents, tools) must not inherit them. */
+const DAEMON_ONLY_ENV = ["PAPERCLIP_API_KEY"];
+function childEnv(extra?: NodeJS.ProcessEnv): NodeJS.ProcessEnv {
+  const env = { ...process.env, ...extra };
+  for (const k of DAEMON_ONLY_ENV) delete env[k];
+  return env;
+}
+
 /**
  * Run a command with an argument array (never through a shell) and a timeout.
  * Never throws: a missing binary or non-zero exit comes back as ok=false.
@@ -42,7 +50,7 @@ export async function run(cmd: string, args: string[] = [], opts: { timeout?: nu
     const { stdout, stderr } = await execFileP(cmd, args, {
       timeout: opts.timeout ?? 8000,
       maxBuffer: 16 * 1024 * 1024,
-      env: { ...process.env, ...opts.env },
+      env: childEnv(opts.env),
       encoding: "utf8",
     });
     return { ok: true, code: 0, stdout, stderr };
@@ -74,7 +82,7 @@ export async function runJson<T>(cmd: string, args: string[] = [], opts?: { time
  */
 export function launchDetached(cmd: string, args: string[] = [], cwd?: string): boolean {
   try {
-    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: process.env });
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: childEnv() });
     child.on("error", () => {});
     child.unref();
     return true;
@@ -96,7 +104,7 @@ export function stream(
   return new Promise((resolve) => {
     let child;
     try {
-      child = spawn(cmd, args, { cwd: opts.cwd, env: { ...process.env, ...opts.env }, stdio: ["pipe", "pipe", "pipe"] });
+      child = spawn(cmd, args, { cwd: opts.cwd, env: childEnv(opts.env), stdio: ["pipe", "pipe", "pipe"] });
     } catch (err) {
       onLine(String(err), "stderr");
       resolve(null);

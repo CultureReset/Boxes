@@ -2,6 +2,7 @@ import { logTalk } from "../lib/chat";
 import { useEffect, useRef, useState } from "react";
 import { Mic, Square, Loader2 } from "lucide-react";
 import { DOOR } from "../lib/door";
+import { useStatus } from "../state/status";
 
 /** Talk to NODE: live spoken conversation with Grok realtime voice.
  *  The door (owner session) mints a 2-minute xAI client secret + the shared node-voice session config;
@@ -28,6 +29,10 @@ export function TalkNode() {
   const r = useRef<{ ws?: WebSocket; ctx?: AudioContext; stream?: MediaStream; proc?: ScriptProcessorNode; sid?: string; playAt: number;
     srcs: AudioBufferSourceNode[]; timer?: number; stop?: () => void; mode: "node" | "relay"; pws?: WebSocket; connect?: () => Promise<void> }>({ playAt: 0, srcs: [], mode: "node" });
   const [who, setWho] = useState("NODE");
+  // Whose NODE this is comes from the daemon's configuration (status.config), never from the bundle.
+  const { status } = useStatus();
+  const ownerRef = useRef("the owner");
+  ownerRef.current = status?.config?.ownerName || "the owner";
   const add = (l: Line) => setLines((x) => [...x.slice(-30), l]);
   useEffect(() => () => r.current.stop?.(), []);
 
@@ -103,7 +108,7 @@ export function TalkNode() {
           if (out && out.open === false) {
             clearInterval(t); await waitIdle();
             send({ type: "conversation.item.create", item: { type: "message", role: "user", content: [{ type: "input_text",
-              text: `[NODE update, not Matt speaking] The change you filed is now: ${(out.steps ?? []).map((s) => s.status).join(", ")}. ${out.answer ?? ""} Tell Matt the result in one sentence.` }] } });
+              text: `[NODE update, not ${ownerRef.current} speaking] The change you filed is now: ${(out.steps ?? []).map((s) => s.status).join(", ")}. ${out.answer ?? ""} Tell ${ownerRef.current} the result in one sentence.` }] } });
             send({ type: "response.create" });
           }
         }, 5000);

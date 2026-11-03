@@ -14,9 +14,11 @@
 # Secrets never go on the command line and are never printed:
 #   --secret-file NAME=PATH   copy the secret from a file
 #   --secret-stdin NAME       read the secret from standard input (one per run)
-# NAME is app_token | api_token | vnc_password. A secret that is not supplied is kept
-# if it already exists; otherwise app_token and vnc_password are generated and
-# api_token is created empty (the daemon then runs without a platform connection).
+# NAME is app_token | api_token | paperclip_api_key | vnc_password. A secret that is not
+# supplied is kept if it already exists; otherwise app_token and vnc_password are generated,
+# api_token is created empty (the daemon then runs without a platform connection) and
+# paperclip_api_key is created empty (the node then REFUSES TO START, unless you pass
+# --paperclip-allow-anon, which is UNSAFE: Paperclip is then called with no credential).
 #
 # Idempotent: running it again with the same inputs changes nothing, keeps the
 # subnets, ports and secrets it chose the first time, and reconciles the project.
@@ -66,6 +68,7 @@ while [ $# -gt 0 ]; do
     --paperclip-url) OPT[PAPERCLIP_API_URL]="${2:?}"; shift ;;
     --paperclip-company) OPT[PAPERCLIP_COMPANY_ID]="${2:?}"; shift ;;
     --paperclip-lead) OPT[PAPERCLIP_LEAD_ID]="${2:?}"; shift ;;
+    --paperclip-allow-anon) OPT[PAPERCLIP_ALLOW_ANON]=1 ;;
     --api-url) OPT[NODEOS_API_URL]="${2:?}"; shift ;;
     --allow) EXTRA_ALLOW+=("${2:?}"); shift ;;
     --customers-dir) CUSTOMERS_DIR="${2:?}"; shift ;;
@@ -167,9 +170,9 @@ if [ "$MODE" = "deprovision" ]; then
   [ -d "$DIR" ] || say "note: $DIR does not exist (nothing of this customer's files on this machine)"
   if [ "$PURGE" = 1 ]; then
     [ "$CONFIRM" = "$SLUG" ] || die "--purge deletes this customer's volumes and files for good; add --confirm-slug $SLUG to proceed"
-    say "PURGE $SLUG: stop the project, delete its volumes (node data, browser profile) and $DIR"
+    say "PURGE $SLUG: stop the project, delete its volumes (node data, edge state, browser profile) and $DIR"
   else
-    say "Deprovision $SLUG: stop and remove the containers and networks; KEEP the volumes (node data, browser profile) and $DIR"
+    say "Deprovision $SLUG: stop and remove the containers and networks; KEEP the volumes (node data, edge state, browser profile) and $DIR"
   fi
   if [ "$APPLY" != 1 ]; then say "(dry run: nothing changed. Add --apply.)"; exit 0; fi
   [ -f "$ENV_FILE" ] || die "$ENV_FILE is missing; cannot address the compose project"
@@ -210,6 +213,8 @@ PAPERCLIP_API_URL="$(setting PAPERCLIP_API_URL)"
 PAPERCLIP_COMPANY_ID="$(setting PAPERCLIP_COMPANY_ID)"
 PAPERCLIP_LEAD_ID="$(setting PAPERCLIP_LEAD_ID)"
 NODEOS_API_URL="$(setting NODEOS_API_URL)"
+PAPERCLIP_ALLOW_ANON="$(setting PAPERCLIP_ALLOW_ANON)"
+[ -z "$PAPERCLIP_ALLOW_ANON" ] || [ "$PAPERCLIP_ALLOW_ANON" = 1 ] || die "PAPERCLIP_ALLOW_ANON must be 1 or unset"
 
 safe_text owner-name "$OWNER_NAME" 80
 safe_text business-name "$BUSINESS_NAME" 120
@@ -228,9 +233,11 @@ for pair in "paperclip-company:$PAPERCLIP_COMPANY_ID" "paperclip-lead:$PAPERCLIP
 done
 [ "$PAPERCLIP_COMPANY_ID" != "$PAPERCLIP_LEAD_ID" ] || die "company and lead ids must differ"
 
-# What the container may reach: Paperclip, the platform API, anything added with --allow.
+# What the container may open tunnels to (port 443): the platform API, anything added with --allow.
+# Paperclip is not in this list: it is reached only through the edge's scoped gateway, and the
+# edge refuses a tunnel to the Paperclip host even if it is listed.
 declare -A seen=(); ALLOW=()
-for h in "$PC_HOST" "$API_HOST" ${EXTRA_ALLOW[@]+"${EXTRA_ALLOW[@]}"}; do
+for h in "$API_HOST" ${EXTRA_ALLOW[@]+"${EXTRA_ALLOW[@]}"}; do
   h="${h//[[:space:]]/}"; [ -n "$h" ] || continue
   [[ "$h" =~ ^[A-Za-z0-9]([A-Za-z0-9.-]*[A-Za-z0-9])?$ ]] || die "--allow takes plain host names or IPv4 addresses"
   [ -n "${seen[$h]+x}" ] || { seen[$h]=1; ALLOW+=("$h"); }
@@ -254,7 +261,7 @@ fi
 
 # Secrets: what will happen to each, without ever reading one into a printed variable.
 declare -A SECRET_PLAN=()
-for name in app_token api_token vnc_password; do
+for name in app_token api_token paperclip_api_key vnc_password; do
   if [ -n "$STDIN_SECRET" ] && [ "$STDIN_SECRET" = "$name" ]; then SECRET_PLAN[$name]="replace from standard input"
   elif [ -n "${SECRET_FILE[$name]+x}" ]; then
     [ -r "${SECRET_FILE[$name]}" ] || die "cannot read the file given for $name"
@@ -262,11 +269,14 @@ for name in app_token api_token vnc_password; do
     SECRET_PLAN[$name]="replace from the file given"
   elif [ -s "$SECRETS_DIR/$name" ]; then SECRET_PLAN[$name]="keep existing"
   elif [ "$name" = api_token ]; then SECRET_PLAN[$name]="create empty (no platform connection until a business token is supplied)"
+  elif [ "$name" = paperclip_api_key ]; then
+    SECRET_PLAN[$name]="create empty (the node will not start until a key is supplied)"
+    [ "$PAPERCLIP_ALLOW_ANON" != 1 ] || SECRET_PLAN[$name]="create empty (--paperclip-allow-anon: the node runs with NO Paperclip credential, UNSAFE)"
   else SECRET_PLAN[$name]="generate"
   fi
 done
-for name in "${!SECRET_FILE[@]}"; do [[ "$name" =~ ^(app_token|api_token|vnc_password)$ ]] || die "unknown secret name: $name"; done
-[ -z "$STDIN_SECRET" ] || [[ "$STDIN_SECRET" =~ ^(app_token|api_token|vnc_password)$ ]] || die "unknown secret name: $STDIN_SECRET"
+for name in "${!SECRET_FILE[@]}"; do [[ "$name" =~ ^(app_token|api_token|paperclip_api_key|vnc_password)$ ]] || die "unknown secret name: $name"; done
+[ -z "$STDIN_SECRET" ] || [[ "$STDIN_SECRET" =~ ^(app_token|api_token|paperclip_api_key|vnc_password)$ ]] || die "unknown secret name: $STDIN_SECRET"
 
 IMAGE_NOTE="builds images from this repository on first start"; [ "$BUILD" = 1 ] && IMAGE_NOTE="rebuilds images from this repository"
 
@@ -275,14 +285,16 @@ IMAGE_NOTE="builds images from this repository on first start"; [ "$BUILD" = 1 ]
 say "Customer:   $SLUG   (compose project $PROJECT)"
 say "Owner:      $OWNER_NAME   Business: $BUSINESS_NAME"
 say "Paperclip:  $PAPERCLIP_API_URL   company $PAPERCLIP_COMPANY_ID   lead $PAPERCLIP_LEAD_ID"
+say "            reached only through the edge gateway: this company's issues, and issues this node created"
+if [ "$PAPERCLIP_ALLOW_ANON" = 1 ]; then say "WARNING:    --paperclip-allow-anon: the node calls Paperclip with NO credential. UNSAFE."; fi
 say "Platform:   $NODEOS_API_URL"
 say "May reach:  $EDGE_ALLOW   (everything else is refused by the edge proxy)"
 say "Networks:   inner (internal, no route out), edge $EDGE_SUBNET, web $WEB_SUBNET"
 say "Ports:      127.0.0.1:$NODE_HOST_PORT -> node (needs a door or the app token)$([ "$DESKTOP" = 1 ] && echo ", 127.0.0.1:$DESKTOP_HOST_PORT -> desktop (noVNC)")"
 say "Desktop:    $([ "$DESKTOP" = 1 ] && echo 'included (profile desktop, UNTESTED)' || echo 'not included (add --desktop)')"
-say "Secrets:    app_token: ${SECRET_PLAN[app_token]}; api_token: ${SECRET_PLAN[api_token]}; vnc_password: ${SECRET_PLAN[vnc_password]}"
+say "Secrets:    app_token: ${SECRET_PLAN[app_token]}; api_token: ${SECRET_PLAN[api_token]}; paperclip_api_key: ${SECRET_PLAN[paperclip_api_key]}; vnc_password: ${SECRET_PLAN[vnc_password]}"
 say "Images:     $IMAGE_NOTE"
-say "Files:      $ENV_FILE  $SECRETS_DIR/{app_token,api_token,vnc_password}  $FIREWALL"
+say "Files:      $ENV_FILE  $SECRETS_DIR/{app_token,api_token,paperclip_api_key,vnc_password}  $FIREWALL"
 
 if [ "$APPLY" != 1 ]; then
   say ""
@@ -316,7 +328,7 @@ put_secret() { # name
   [ "$name" != vnc_password ] || [ -s "$tmp" ] || { rm -f "$tmp"; die "vnc_password cannot be empty"; }
   chmod 444 "$tmp"; mv "$tmp" "$dest"; say "  secret     $dest (${SECRET_PLAN[$name]})"
 }
-for name in app_token api_token vnc_password; do put_secret "$name"; done
+for name in app_token api_token paperclip_api_key vnc_password; do put_secret "$name"; done
 
 write_file "$ENV_FILE" 600 <<EOF
 # Generated by scripts/provision-customer.sh. No secrets in this file. Safe to regenerate.
@@ -328,6 +340,7 @@ PAPERCLIP_API_URL=$PAPERCLIP_API_URL
 PAPERCLIP_COMPANY_ID=$PAPERCLIP_COMPANY_ID
 PAPERCLIP_LEAD_ID=$PAPERCLIP_LEAD_ID
 NODEOS_API_URL=$NODEOS_API_URL
+PAPERCLIP_ALLOW_ANON=$PAPERCLIP_ALLOW_ANON
 EDGE_ALLOW=$EDGE_ALLOW
 EDGE_SUBNET=$EDGE_SUBNET
 WEB_SUBNET=$WEB_SUBNET

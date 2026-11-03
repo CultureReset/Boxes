@@ -113,6 +113,8 @@ export interface Status {
   background: string | null;
   uptimeSeconds: number;
   capabilities: Record<string, boolean>;
+  /** Whose NODE this is and its public MCP endpoint (empty when there is none). Configuration, never a secret. */
+  config: { ownerName: string; businessName: string; mcpUrl: string };
   /** Present only in hosted (customer) mode: what this copy of NODE does not have. */
   hosted?: { mode: "home" | "customer"; message: string; unavailable: readonly string[] };
 }

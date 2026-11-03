@@ -1,6 +1,6 @@
 import { createJob, appendLine, finishJob } from "./jobs.js";
 import type { Job } from "../types.js";
-import { paperclipSettings, issueDescription } from "../mode.js";
+import { paperclipSettings, issueDescription, paperclipAuthHeader, redactPaperclipKey } from "../mode.js";
 
 /**
  * Paperclip is where work happens; NODE is only a front door. A request
@@ -12,14 +12,18 @@ const POLL_MS = Number(process.env.PAPERCLIP_POLL_MS ?? 5000);
 const FINAL = new Set(["done", "cancelled", "blocked", "in_review"]);
 
 async function pc<T>(method: string, p: string, body?: unknown): Promise<T> {
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["content-type"] = "application/json";
+  const auth = paperclipAuthHeader();
+  if (auth) headers.authorization = auth;
   const r = await fetch(paperclipSettings().api + p, {
     method,
-    headers: body !== undefined ? { "content-type": "application/json" } : undefined,
+    headers: Object.keys(headers).length ? headers : undefined,
     body: body !== undefined ? JSON.stringify(body) : undefined,
     signal: AbortSignal.timeout(30_000),
   });
   const t = await r.text();
-  if (!r.ok) throw new Error(`Paperclip ${r.status}: ${t.slice(0, 200)}`);
+  if (!r.ok) throw new Error(redactPaperclipKey(`Paperclip ${r.status}: ${t.slice(0, 200)}`));
   return (t ? JSON.parse(t) : {}) as T;
 }
 
