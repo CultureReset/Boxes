@@ -78,5 +78,61 @@
   "localPort": 17811,
   "servePort": 33443,
   "path": "/"
+ },
+ {
+  "slug": "notes",
+  "upstream": "http://127.0.0.1:8025",
+  "localPort": 17812,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "crm2",
+  "upstream": "http://127.0.0.1:3020",
+  "localPort": 17813,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "pos",
+  "upstream": "http://127.0.0.1:8069",
+  "localPort": 17814,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "tickets",
+  "upstream": "http://127.0.0.1:8345",
+  "localPort": 17815,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "kamra",
+  "upstream": "http://127.0.0.1:8090",
+  "localPort": 17816,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "supabase",
+  "upstream": "http://127.0.0.1:54323",
+  "localPort": 17817,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "rakazo",
+  "upstream": "http://127.0.0.1:45173",
+  "localPort": 17818,
+  "servePort": 0,
+  "path": "/"
+ },
+ {
+  "slug": "desktop",
+  "upstream": "http://127.0.0.1:8081",
+  "localPort": 17819,
+  "servePort": 0,
+  "path": "/"
  }
 ]

@@ -23,18 +23,26 @@ export function frames(): Frame[] {
   try { return JSON.parse(readFileSync(FILE, "utf8")) as Frame[]; } catch { return []; }
 }
 
-const NODE_ORIGIN = process.env.NODEOS_PUBLIC_ORIGIN ?? "https://steve-ms-7c02.tail1af4f2.ts.net:14443";
+/** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
+const FRAME_ANCESTORS = (
+  process.env.NODEOS_FRAME_ANCESTORS
+  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
+).trim();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
   const out: http.OutgoingHttpHeaders = { ...h };
   delete out["x-frame-options"];
+  let sawCsp = false;
   for (const k of ["content-security-policy", "content-security-policy-report-only"]) {
     const v = out[k];
     if (!v) continue;
+    sawCsp = true;
     const s = (Array.isArray(v) ? v.join(", ") : String(v)).split(";").map((d) => d.trim()).filter((d) => d && !/^frame-ancestors\b/i.test(d));
-    s.push(`frame-ancestors 'self' ${NODE_ORIGIN}`);
+    s.push(`frame-ancestors 'self' ${FRAME_ANCESTORS}`);
     out[k] = s.join("; ");
   }
+  // Apps that only sent X-Frame-Options need an explicit ancestors allow-list.
+  if (!sawCsp) out["content-security-policy"] = `frame-ancestors 'self' ${FRAME_ANCESTORS}`;
   return out;
 }
 
@@ -94,7 +102,9 @@ function start(f: Frame): void {
     req.pipe(p);
   });
   srv.on("upgrade", async (req, sock, head) => {
-    if (isRemote(req) && !(await doorUser(req))) { sock.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"); return; }
+    const cfEmail = req.headers["cf-access-authenticated-user-email"];
+    const cfOk = typeof cfEmail === "string" && cfEmail.includes("@");
+    if (isRemote(req) && !cfOk && !(await doorUser(req))) { sock.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"); return; }
     const u = net.connect({ port, host: up.hostname, localAddress: f.localAddress }, () => {
       const lines = [`${req.method} ${req.url} HTTP/1.1`];
       for (const [k, v] of Object.entries(upstreamHeaders(f, req.headers))) for (const x of Array.isArray(v) ? v : [v]) if (x !== undefined) lines.push(`${k}: ${x}`);

@@ -2,17 +2,26 @@
   {
     "slug": "openjarvis",
     "name": "OpenJarvis",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:20443/",
-    "comment": "AI assistant UI",
+    "url": "https://jarvis.voicecommandapi.com/",
+    "comment": "AI assistant",
     "color": "#0a84ff",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/openjarvis.png",
     "open": "frame"
   },
   {
+    "slug": "rakazo",
+    "name": "Rakazo",
+    "url": "https://rakazo.voicecommandapi.com/",
+    "comment": "Talk to apps / agents",
+    "color": "#bf5af2",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
     "slug": "twenty-crm",
     "name": "Twenty CRM",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:26443/",
+    "url": "https://crm.voicecommandapi.com/",
     "comment": "CRM",
     "color": "#5e5ce6",
     "category": "This Computer",
@@ -20,13 +29,19 @@
     "open": "frame"
   },
   {
+    "slug": "crm2",
+    "name": "CRM 2",
+    "url": "https://crm2.voicecommandapi.com/",
+    "comment": "Twenty CRM 2",
+    "color": "#5e5ce6",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
     "slug": "paperclip",
-    "includes": [
-      "OpenClaw",
-      "Hermes"
-    ],
+    "includes": ["OpenClaw", "Hermes"],
     "name": "Paperclip",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:30443/",
+    "url": "https://paperclip.voicecommandapi.com/",
     "comment": "Agent company",
     "color": "#ff9f0a",
     "category": "This Computer",
@@ -36,7 +51,7 @@
   {
     "slug": "n8n",
     "name": "n8n",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:25443/",
+    "url": "https://automations.voicecommandapi.com/",
     "comment": "Workflow automation",
     "color": "#ff375f",
     "category": "This Computer",
@@ -44,30 +59,29 @@
     "open": "frame"
   },
   {
-    "slug": "litellm",
-    "name": "LiteLLM",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:23443/ui/",
-    "comment": "LLM proxy admin",
+    "slug": "notes",
+    "name": "Notes",
+    "url": "https://notes.voicecommandapi.com/",
+    "comment": "AppFlowy",
     "color": "#30d158",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/litellm.png",
     "open": "frame"
   },
   {
-    "slug": "searxng",
-    "name": "SearXNG",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:29443/",
-    "comment": "Private search",
+    "slug": "desktop",
+    "name": "Desktop",
+    "url": "https://desktop.voicecommandapi.com/",
+    "comment": "Selkies remote desktop",
     "color": "#64d2ff",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/searxng.png"
+    "open": "frame"
   },
   {
     "slug": "openclaw",
     "parent": "paperclip",
     "name": "OpenClaw",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:31443/",
-    "comment": "Agent gateway control UI",
+    "url": "https://openclaw.voicecommandapi.com/",
+    "comment": "Agent gateway",
     "color": "#ff453a",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/openclaw.png",
@@ -76,7 +90,7 @@
   {
     "slug": "uptime-kuma",
     "name": "Uptime Kuma",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:7443/",
+    "url": "https://status.voicecommandapi.com/",
     "comment": "Service monitor",
     "color": "#30d158",
     "category": "This Computer",
@@ -86,7 +100,7 @@
   {
     "slug": "navidrome",
     "name": "Navidrome",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:4443/",
+    "url": "https://music.voicecommandapi.com/",
     "comment": "Music",
     "color": "#bf5af2",
     "category": "This Computer",
@@ -94,21 +108,70 @@
     "open": "frame"
   },
   {
-    "slug": "crawl4ai",
-    "name": "Crawl4AI",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/playground",
-    "comment": "Web crawler playground",
-    "color": "#ac8e68",
-    "category": "This Computer"
+    "slug": "searxng",
+    "name": "SearXNG",
+    "url": "https://search.voicecommandapi.com/",
+    "comment": "Private search",
+    "color": "#64d2ff",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/searxng.png",
+    "open": "frame"
   },
   {
     "slug": "llama-swap",
     "name": "llama-swap",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:13443/",
+    "url": "https://llm.voicecommandapi.com/ui",
     "comment": "Local LLM models",
     "color": "#ffd60a",
     "category": "This Computer",
-    "icon": "/home/steve/.local/share/node-icons/llama-swap.png"
+    "icon": "/home/steve/.local/share/node-icons/llama-swap.png",
+    "open": "frame"
+  },
+  {
+    "slug": "supabase",
+    "name": "Supabase",
+    "url": "https://supabase.voicecommandapi.com/",
+    "comment": "Studio",
+    "color": "#3ecf8e",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
+    "slug": "pos",
+    "name": "POS",
+    "url": "https://pos.voicecommandapi.com/",
+    "comment": "Odoo",
+    "color": "#714B67",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
+    "slug": "tickets",
+    "name": "Tickets",
+    "url": "https://tickets.voicecommandapi.com/",
+    "comment": "Pretix",
+    "color": "#34c759",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
+    "slug": "kamra",
+    "name": "Kamra",
+    "url": "https://kamra.voicecommandapi.com/",
+    "comment": "PMS",
+    "color": "#ff9f0a",
+    "category": "This Computer",
+    "open": "frame"
+  },
+  {
+    "slug": "litellm",
+    "name": "LiteLLM",
+    "url": "https://api.voicecommandapi.com/ui/",
+    "comment": "LLM proxy admin (new tab — public /ui blocked)",
+    "color": "#30d158",
+    "category": "This Computer",
+    "icon": "/home/steve/.local/share/node-icons/litellm.png",
+    "open": "tab"
   },
   {
     "slug": "minidlna",
@@ -116,14 +179,25 @@
     "url": "http://100.104.20.101:8200/",
     "comment": "Media server status",
     "color": "#64d2ff",
-    "category": "This Computer"
+    "category": "This Computer",
+    "open": "tab"
   },
   {
     "slug": "mcp",
-    "name": "MCP",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:10000/mcp",
-    "comment": "Connect AI clients to NODE",
+    "name": "MCP Hub",
+    "url": "https://hub.voicecommandapi.com/",
+    "comment": "Bearer API — open in new tab",
     "color": "#8e8e93",
-    "category": "This Computer"
+    "category": "This Computer",
+    "open": "tab"
+  },
+  {
+    "slug": "crawl4ai",
+    "name": "Crawl4AI",
+    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/playground",
+    "comment": "Web crawler (Tailscale)",
+    "color": "#ac8e68",
+    "category": "This Computer",
+    "open": "tab"
   }
 ]

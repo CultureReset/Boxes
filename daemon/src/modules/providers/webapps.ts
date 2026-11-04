@@ -136,6 +136,9 @@ function frameUrlFor(slug: string, url: string): string | undefined {
   const f = frames().find((x) => x.slug === slug);
   if (!f) return undefined;
   const u = new URL(url);
+  // Cloudflare Access apps already sit on :443 with Access in front. Rewriting
+  // them onto Tailscale serve ports would break framing from node.voicecommandapi.com.
+  if (u.hostname.endsWith(".voicecommandapi.com") || !f.servePort) return undefined;
   return `https://${u.hostname}:${f.servePort}${f.path}`;
 }
 

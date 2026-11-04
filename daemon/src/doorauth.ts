@@ -74,9 +74,15 @@ export async function doorUser(req: http.IncomingMessage): Promise<string | null
 /** true = allowed to continue. Otherwise the response was sent. */
 export async function requireDoor(req: http.IncomingMessage, res: http.ServerResponse, framed = false): Promise<boolean> {
   if (!isRemote(req)) return true;
+  // Cloudflare Access already gated the hostname (Matt-only). Trust its identity
+  // header so framed apps on *.voicecommandapi.com don't need a second door login.
+  const cfEmail = req.headers["cf-access-authenticated-user-email"];
+  if (typeof cfEmail === "string" && cfEmail.includes("@")) return true;
+  // n8n production webhooks / forms stay open (Access bypass at the edge).
+  const url = req.url ?? "/";
+  if (url.startsWith("/webhook") || url.startsWith("/form")) return true;
   if (await doorUser(req)) return true;
   const login = `${DOOR_PUBLIC}/login?return=${encodeURIComponent(NODE_PUBLIC + "/")}`;
-  const url = req.url ?? "/";
   if (!framed && url.startsWith("/api/")) {
     res.writeHead(401, { "content-type": "application/json", "cache-control": "no-store" });
     res.end(JSON.stringify({ error: "sign in first", login }));
