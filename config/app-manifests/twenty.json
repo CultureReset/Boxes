@@ -1,0 +1,37 @@
+{
+  "id": "twenty",
+  "name": "Twenty CRM",
+  "version": "0.1.0",
+  "publisher": "CultureReset",
+  "icon": "twenty-crm",
+  "category": "CRM",
+  "source": {
+    "kind": "external-url",
+    "url": "https://crm.voicecommandapi.com/",
+    "upstream": "http://127.0.0.1:3000"
+  },
+  "frontend": {
+    "kind": "integrated",
+    "entry": "shell/src/native/IntegratedTwenty.tsx",
+    "nativeSlug": "twenty-crm",
+    "doorApp": "twenty"
+  },
+  "backend": {
+    "routePrefix": "/door/app/twenty",
+    "upstream": "http://127.0.0.1:3000"
+  },
+  "auth": {
+    "mode": "door-session",
+    "tokenExchange": "tbd"
+  },
+  "permissions": ["crm.read", "crm.write"],
+  "tenancy": { "scope": "workspace" },
+  "availability": { "online": "full", "degraded": "read-only", "offline": "cached-list" },
+  "lifecycle": {
+    "install": "register-running",
+    "enable": "mark-installed",
+    "disable": "hide-tile",
+    "uninstall": "unregister"
+  },
+  "notes": "Connect-first: Twenty Docker already runs on the node. Hub FE talks to Twenty REST via door — not iframe-only login."
+}

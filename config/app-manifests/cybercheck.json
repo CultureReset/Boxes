@@ -1,0 +1,36 @@
+{
+  "id": "cybercheck",
+  "name": "CyberCheck",
+  "version": "0.1.0",
+  "publisher": "CultureReset",
+  "icon": "shield",
+  "category": "Security",
+  "source": {
+    "kind": "native-module",
+    "module": "shell/src/modules/cybercheck"
+  },
+  "frontend": {
+    "kind": "native",
+    "entry": "shell/src/modules/cybercheck/CyberCheckApp.tsx",
+    "nativeSlug": "cybercheck",
+    "screenId": "cybercheck"
+  },
+  "backend": {
+    "routePrefix": "/api/cybercheck",
+    "upstream": "native"
+  },
+  "auth": {
+    "mode": "door-session",
+    "tokenExchange": "tbd"
+  },
+  "permissions": ["cybercheck.status", "cybercheck.owner-check"],
+  "tenancy": { "scope": "workspace" },
+  "availability": { "online": "full", "degraded": "status-only", "offline": "last-status" },
+  "lifecycle": {
+    "install": "enable-native-module",
+    "enable": "show-home-tile",
+    "disable": "hide-tile",
+    "uninstall": "unregister"
+  },
+  "notes": "First native React module inside Hub shell. One useful surface (owner/status) in M1c; M1a only registers the manifest."
+}
