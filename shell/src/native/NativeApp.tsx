@@ -1,3 +1,4 @@
+import { IntegratedTwenty } from "./IntegratedTwenty";
 import { useEffect, useState, type ReactNode } from "react";
 import { door, DOOR as DOOR_BASE } from "../lib/door";
 
@@ -279,7 +280,7 @@ function Health({ name, paths, n }: { name: string; paths: string[]; n: number }
 
 export function NativeApp({ slug, n }: { slug: string; n: number }) {
   switch (slug) {
-    case "twenty-crm": return <Twenty n={n} />;
+    case "twenty-crm": return <IntegratedTwenty n={n} />;
     case "navidrome": return <Navidrome n={n} />;
     case "uptime-kuma": return <Kuma n={n} />;
     case "n8n": return <N8n n={n} />;

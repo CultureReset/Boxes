@@ -71,8 +71,9 @@ export function AppStore(_props: ScreenProps) {
       navigate(a.frontend.screenId);
       return;
     }
-    if (a.frontend.nativeSlug) {
-      showAppView({ kind: "native", slug: a.frontend.nativeSlug, title: a.name });
+    // Integrated (Twenty) and native modules open inside Hub chrome via native host.
+    if (a.frontend.kind === "integrated" || a.frontend.nativeSlug) {
+      showAppView({ kind: "native", slug: a.frontend.nativeSlug || a.id, title: a.name });
       return;
     }
     if (a.source.url) {

@@ -39,6 +39,13 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
     return;
   }
 
+  // Twenty CRM (M1b): Integrated Hub FE via door — not iframe-only login.
+  // Other Access apps still open as fullscreen frames.
+  const isTwenty = a.id === "web:twenty-crm" || a.id.endsWith(":twenty-crm") || (/twenty/i.test(a.name) && /crm/i.test(a.name));
+  if (isTwenty || (a.provider === "web" && a.id.includes("twenty-crm"))) {
+    return showAppView({ kind: "native", slug: "twenty-crm", title: a.name || "Twenty CRM" });
+  }
+
   // Prefer the REAL full web app inside NODE (fullscreen iframe).
   const web = a.frameUrl ?? a.url;
   if (web && a.provider === "web") {
