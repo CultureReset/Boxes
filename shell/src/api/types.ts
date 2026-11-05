@@ -369,3 +369,22 @@ export interface HubInstalledApp {
   workspace?: string;
   manifest: HubStoreApp | null;
 }
+
+
+export type WorkflowReceiptStatus = "requested" | "pending" | "approved" | "running" | "completed" | "failed" | "denied";
+
+export interface WorkflowReceipt {
+  id: string;
+  workflowId: string;
+  workflowName: string;
+  actionType: string;
+  approvalId?: string;
+  status: WorkflowReceiptStatus;
+  requestedAt: string;
+  updatedAt: string;
+  completedAt?: string;
+  otpRequired: boolean;
+  otpSubmitted: boolean;
+  proof?: string;
+  error?: string;
+}
