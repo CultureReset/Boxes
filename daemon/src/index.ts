@@ -7,6 +7,8 @@ import path from "node:path";
 import { askPaperclip } from "./modules/paperclip.js";
 import { storeCatalog, listInstalled, registerInstalled, unregisterInstalled, setEnabled, listManifests, getManifest } from "./modules/registry.js";
 import { cybercheckStatus, runCybercheck } from "./modules/cybercheck.js";
+import { listReceipts, getReceipt } from "./modules/receipts.js";
+import { workflowCatalog, requestApprovedWorkflow, submitWorkflowOtp, markWorkflowRunning, completeWorkflow, refreshApprovalStatus } from "./modules/workflows.js";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
@@ -235,6 +237,36 @@ api.post("/api/cybercheck/run", async ({ req }) => {
   const email = typeof req.headers["x-door-email"] === "string" ? req.headers["x-door-email"] : undefined;
   const role = typeof req.headers["x-door-role"] === "string" ? req.headers["x-door-role"] : undefined;
   return runCybercheck(email ? { email, role, via: "door" } : null);
+});
+
+// ---- Approved workflow + receipts (M1d) --------------------------------
+api.get("/api/hub/workflows", () => workflowCatalog());
+api.get("/api/hub/receipts", () => listReceipts());
+api.get("/api/hub/receipts/:id", async ({ params }) => {
+  const r = await getReceipt(params.id);
+  if (!r) throw new HttpError(404, "Receipt not found");
+  return r;
+});
+api.post("/api/hub/workflows/request", ({ body }) => {
+  const b = obj(body);
+  return requestApprovedWorkflow({
+    workflowId: str(b.workflowId, "workflowId", { optional: true, max: 128 }) || undefined,
+    workflowName: str(b.workflowName, "workflowName", { optional: true, max: 120 }) || undefined,
+    reason: str(b.reason, "reason", { optional: true, max: 500 }) || undefined,
+  });
+});
+api.post("/api/hub/receipts/:id/otp", ({ params, body }) =>
+  submitWorkflowOtp(params.id, str(obj(body).code ?? obj(body).otp, "code", { max: 12 })),
+);
+api.post("/api/hub/receipts/:id/refresh", ({ params }) => refreshApprovalStatus(params.id));
+api.post("/api/hub/receipts/:id/running", ({ params }) => markWorkflowRunning(params.id));
+api.post("/api/hub/receipts/:id/complete", ({ params, body }) => {
+  const b = obj(body);
+  return completeWorkflow(params.id, {
+    ok: b.ok !== false,
+    proof: str(b.proof, "proof", { optional: true, max: 2000 }) || undefined,
+    error: str(b.error, "error", { optional: true, max: 1000 }) || undefined,
+  });
 });
 api.get("/api/android", () => androidStatus());
 api.get("/api/layout", () => getLayout());

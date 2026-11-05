@@ -144,6 +144,9 @@ export function AppStore(_props: ScreenProps) {
         <button type="button" className="chip" onClick={() => navigate("apps")} style={{ marginLeft: 8 }}>
           <Download size={14} /> All Apps
         </button>
+        <button type="button" className="chip" onClick={() => navigate("receipts")} style={{ marginLeft: 4 }}>
+          Receipts
+        </button>
         {" "}
         <button type="button" className="chip" onClick={() => { reload(); reloadInstalled(); }} style={{ marginLeft: 4 }}>
           Refresh
