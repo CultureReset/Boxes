@@ -6,6 +6,7 @@ import http from "node:http";
 import path from "node:path";
 import { askPaperclip } from "./modules/paperclip.js";
 import { storeCatalog, listInstalled, registerInstalled, unregisterInstalled, setEnabled, listManifests, getManifest } from "./modules/registry.js";
+import { cybercheckStatus, runCybercheck } from "./modules/cybercheck.js";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
@@ -221,6 +222,19 @@ api.post("/api/hub/enable", ({ body }) => {
 api.post("/api/hub/disable", ({ body }) => {
   const b = obj(body);
   return setEnabled(str(b.id ?? b.manifestId, "id", { max: 64 }), false);
+});
+
+// ---- Native CyberCheck module (M1c) ------------------------------------
+api.get("/api/cybercheck/status", async ({ req }) => {
+  // Best-effort owner from door headers if present; doorauth may already have validated.
+  const email = typeof req.headers["x-door-email"] === "string" ? req.headers["x-door-email"] : undefined;
+  const role = typeof req.headers["x-door-role"] === "string" ? req.headers["x-door-role"] : undefined;
+  return cybercheckStatus(email ? { email, role, via: "door" } : null);
+});
+api.post("/api/cybercheck/run", async ({ req }) => {
+  const email = typeof req.headers["x-door-email"] === "string" ? req.headers["x-door-email"] : undefined;
+  const role = typeof req.headers["x-door-role"] === "string" ? req.headers["x-door-role"] : undefined;
+  return runCybercheck(email ? { email, role, via: "door" } : null);
 });
 api.get("/api/android", () => androidStatus());
 api.get("/api/layout", () => getLayout());
