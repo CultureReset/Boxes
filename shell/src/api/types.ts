@@ -344,3 +344,28 @@ export interface Attachment { id: string; name: string; type: string; size: numb
 export interface ChatMessage { role: "user" | "assistant"; content: string; at: string; model?: string; attachments?: Attachment[]; error?: boolean; pending?: boolean }
 export interface Chat { id: string; title: string; model: string; createdAt: string; updatedAt: string; messages: ChatMessage[] }
 export interface ChatSummary { id: string; title: string; model: string; createdAt: string; updatedAt: string; count: number }
+
+
+/** Connect-first Hub App Store (manifest + install state). */
+export interface HubStoreApp {
+  id: string;
+  name: string;
+  version: string;
+  category?: string;
+  notes?: string;
+  installed: boolean;
+  enabled: boolean;
+  installable: boolean;
+  frontend: { kind: "native" | "embedded" | "integrated"; nativeSlug?: string; screenId?: string; doorApp?: string };
+  source: { kind: string; url?: string; upstream?: string; module?: string };
+}
+
+export interface HubInstalledApp {
+  id: string;
+  manifestId: string;
+  installedAt: string;
+  enabled: boolean;
+  source: "connect-first" | "native-module";
+  workspace?: string;
+  manifest: HubStoreApp | null;
+}

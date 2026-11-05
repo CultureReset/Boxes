@@ -1,5 +1,5 @@
 import type { ComponentType } from "react";
-import { Home as HomeIcon, LayoutGrid, Sparkles, Zap, Folder, Calendar as CalendarIcon, Settings as SettingsIcon } from "lucide-react";
+import { Home as HomeIcon, LayoutGrid, Sparkles, Zap, Folder, Calendar as CalendarIcon, Settings as SettingsIcon, Store } from "lucide-react";
 import { Home } from "../screens/Home";
 import { Apps } from "../screens/Apps";
 import { Agents } from "../screens/Agents";
@@ -7,6 +7,7 @@ import { Automations } from "../screens/Automations";
 import { Files } from "../screens/Files";
 import { Calendar } from "../screens/Calendar";
 import { Settings } from "../screens/settings/Settings";
+import { AppStore } from "../screens/AppStore";
 
 export interface ScreenProps {
   sub?: string;
@@ -39,6 +40,7 @@ export const SCREENS: ScreenModule[] = [
   { id: "automations", title: "Automations", icon: Zap, component: Automations, nav: true, tab: false, ask: "Describe something to automate…" },
   { id: "files", title: "Files", icon: Folder, component: (p) => <Files path={p.params.get("path") ?? "~"} />, nav: true, tab: true, ask: "Find or organize a file…" },
   { id: "calendar", title: "Calendar", icon: CalendarIcon, component: () => <Calendar />, nav: false, tab: false },
+  { id: "store", title: "App Store", icon: Store, component: AppStore, nav: true, tab: false, ask: "Install or register an app…" },
   { id: "settings", title: "Settings", icon: SettingsIcon, component: (p) => <Settings panel={p.sub} onJob={p.onJob} />, nav: false, tab: true },
 ];
 

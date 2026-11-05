@@ -107,6 +107,9 @@ export function Apps({ onJob, params }: ScreenProps) {
   return (
     <>
       <Hero title="Apps" subtitle="Everything you can open, all in one place." />
+      <div className="toolbar" style={{ paddingTop: 0 }}>
+        <button type="button" className="chip" onClick={() => navigate("store")}>NODE App Store — Twenty + CyberCheck</button>
+      </div>
       <div className="toolbar">
         <label className="search">
           <Search size={18} />

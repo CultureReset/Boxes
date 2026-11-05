@@ -5,6 +5,7 @@ import { requireDoor } from "./doorauth.js";
 import http from "node:http";
 import path from "node:path";
 import { askPaperclip } from "./modules/paperclip.js";
+import { storeCatalog, listInstalled, registerInstalled, unregisterInstalled, setEnabled, listManifests, getManifest } from "./modules/registry.js";
 import { readFile, stat } from "node:fs/promises";
 import { fileURLToPath } from "node:url";
 import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
@@ -196,6 +197,31 @@ api.post("/api/webapps/add", ({ body }) => {
   return addWebApp({ slug: str(b.slug, "slug", { optional: true, max: 64 }) || undefined, name: str(b.name, "name", { optional: true, max: 64 }) || undefined, url: str(b.url, "url", { optional: true, max: 2048 }) || undefined, color: str(b.color, "color", { optional: true, max: 16 }) || undefined });
 });
 api.post("/api/webapps/remove", ({ body }) => removeWebApp(str(obj(body).slug, "slug", { max: 64 })));
+
+// ---- Hub app registry (connect-first / manifests) -----------------------
+api.get("/api/hub/manifests", () => listManifests());
+api.get("/api/hub/manifests/:id", async ({ params }) => {
+  const m = await getManifest(params.id);
+  if (!m) throw new HttpError(404, "Unknown manifest");
+  return m;
+});
+api.get("/api/hub/store", () => storeCatalog());
+api.get("/api/hub/installed", () => listInstalled());
+api.post("/api/hub/install", ({ body }) => {
+  const b = obj(body);
+  return registerInstalled(str(b.id ?? b.manifestId, "id", { max: 64 }), {
+    workspace: str(b.workspace, "workspace", { optional: true, max: 64 }) || undefined,
+  });
+});
+api.post("/api/hub/uninstall", ({ body }) => unregisterInstalled(str(obj(body).id ?? obj(body).manifestId, "id", { max: 64 })));
+api.post("/api/hub/enable", ({ body }) => {
+  const b = obj(body);
+  return setEnabled(str(b.id ?? b.manifestId, "id", { max: 64 }), true);
+});
+api.post("/api/hub/disable", ({ body }) => {
+  const b = obj(body);
+  return setEnabled(str(b.id ?? b.manifestId, "id", { max: 64 }), false);
+});
 api.get("/api/android", () => androidStatus());
 api.get("/api/layout", () => getLayout());
 api.get("/api/worlds", () => listWorlds());
