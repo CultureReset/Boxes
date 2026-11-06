@@ -1,10 +1,12 @@
 import { createJob, appendLine, finishJob } from "./jobs.js";
 import type { Job } from "../types.js";
+import { randomUUID } from "node:crypto";
 
 /**
  * Paperclip is where work happens; NODE is only a front door. A request
  * becomes an issue assigned to Lead, and Lead's answer comment comes back
- * here. Same logic as ~/.local/bin/paperclip-mcp-slim paperclipAsk.
+ * here. Comments are legacy progress output, NOT authoritative terminal evidence.
+ * Durable terminal result/ack semantics belong to the separate Python transport.
  */
 const API = (process.env.PAPERCLIP_API_URL ?? "http://127.0.0.1:3100/api").replace(/\/$/, "");
 const COMPANY = process.env.PAPERCLIP_COMPANY_ID ?? "ffaab782-ce21-4946-b86c-dbab054ddf1c";
@@ -27,24 +29,52 @@ async function pc<T>(method: string, p: string, body?: unknown): Promise<T> {
 interface Issue { id: string; identifier?: string; status?: string }
 interface Comment { body?: string; authorType?: string; createdAt?: string }
 
-export function askPaperclip(prompt: string, source = "NODE app", meta: Record<string, unknown> = {}): Job {
+export interface PaperclipRequestMeta extends Record<string, unknown> {
+  /** Stable caller request ID; repeated attempts reuse the Paperclip create key. */
+  request_id?: string;
+  /** Originating Jarvis/chat conversation ID, preserved across all retries. */
+  conversation_id?: string;
+}
+
+export function bridgeRequestKey(meta: PaperclipRequestMeta): string {
+  const requestId = typeof meta.request_id === "string" ? meta.request_id.trim() : "";
+  return `jarvis:${requestId || randomUUID()}`;
+}
+
+export function paperclipCreateBody(prompt: string, source: string, title: string, meta: PaperclipRequestMeta) {
+  const conversationId = typeof meta.conversation_id === "string" ? meta.conversation_id.trim() : "";
+  const requestId = typeof meta.request_id === "string" ? meta.request_id.trim() : "";
+  return {
+    title,
+    // Do not request that arbitrary comments be treated as terminal proof.
+    description: `${prompt}\n\n---\njarvis_request_id: ${requestId}\njarvis_conversation_id: ${conversationId || requestId}\nFrom Matt via ${source}.`,
+    status: "todo",
+    assigneeAgentId: LEAD,
+    // Paperclip scopes this key to company, and replays the original issue.
+    // Never identify an existing task by matching user-supplied titles.
+    idempotencyKey: bridgeRequestKey({ ...meta, request_id: requestId }),
+    allowDuplicate: true,
+  };
+}
+
+export function askPaperclip(prompt: string, source = "NODE app", meta: PaperclipRequestMeta = {}): Job {
   const title = (prompt.split("\n")[0] || "Request from NODE").slice(0, 90);
   const job = createJob("agent", title, { ...meta, via: "paperclip", assignee: "Lead" });
   void (async () => {
     let iss: Issue;
     try {
-      iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, {
-        title,
-        description: `${prompt}\n\n---\nFrom Matt via ${source}. Answer or do this, then post the final answer for Matt as a short plain-language comment on this issue and set the issue to done. Delegate if needed.`,
-        status: "todo",
-        assigneeAgentId: LEAD,
-      });
+      iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, paperclipCreateBody(prompt, source, title, meta));
     } catch (e) {
       appendLine(job, `Could not reach Paperclip: ${(e as Error).message}`);
       return finishJob(job, false);
     }
     const ident = iss.identifier ?? iss.id;
-    if (job.meta) { job.meta.issueId = iss.id; job.meta.issue = ident; }
+    if (job.meta) {
+      job.meta.issueId = iss.id;
+      job.meta.issue = ident;
+      job.meta.request_id ??= randomUUID();
+      job.meta.conversation_id ??= job.meta.request_id;
+    }
     appendLine(job, `Working in Paperclip… issue ${ident} (assigned to Lead)`);
     const t0 = Date.now();
     let last: string | null = null;
@@ -73,14 +103,9 @@ export function askPaperclip(prompt: string, source = "NODE app", meta: Record<s
 export interface AskResult { ok: boolean; issue: string; issueId: string; status: string; seconds: number; answer: string }
 
 /** paperclipAsk, waiting for the answer (same logic as paperclip-mcp-slim). */
-export async function askPaperclipWait(prompt: string, source: string, title?: string): Promise<AskResult> {
+export async function askPaperclipWait(prompt: string, source: string, title?: string, meta: PaperclipRequestMeta = {}): Promise<AskResult> {
   const t = (title?.trim() || prompt.split("\n")[0] || "Request").slice(0, 90);
-  const iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, {
-    title: t,
-    description: `${prompt}\n\n---\nFrom Matt via ${source}. Answer or do this, then post the final answer for Matt as a short plain-language comment on this issue and set the issue to done. Delegate if needed.`,
-    status: "todo",
-    assigneeAgentId: LEAD,
-  });
+  const iss = await pc<Issue>("POST", `/companies/${COMPANY}/issues`, paperclipCreateBody(prompt, source, t, meta));
   const ident = iss.identifier ?? iss.id;
   const t0 = Date.now();
   let last: string | null = null;
