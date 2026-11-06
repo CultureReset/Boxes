@@ -39,6 +39,16 @@ async function body(req: http.IncomingMessage): Promise<any> {
   return t ? JSON.parse(t) : {};
 }
 
+function bridgeMeta(value: Record<string, unknown>): import("./modules/paperclip.js").PaperclipRequestMeta {
+  const requestId = String(value.request_id ?? "").trim();
+  const conversationId = String(value.conversation_id ?? "").trim();
+  if (!requestId && !conversationId) return {};
+  if (!requestId || requestId.length > 200) throw new Error("request_id is required with conversation_id (1-200 characters)");
+  if (!conversationId || conversationId.length > 200) throw new Error("conversation_id is required with request_id (1-200 characters)");
+  if (requestId === conversationId) throw new Error("request_id and conversation_id must be distinct");
+  return { request_id: requestId, conversation_id: conversationId };
+}
+
 function send(res: http.ServerResponse, code: number, v: unknown): void {
   res.writeHead(code, { "content-type": "application/json", "cache-control": "no-store" });
   res.end(JSON.stringify(v));
@@ -47,7 +57,7 @@ function send(res: http.ServerResponse, code: number, v: unknown): void {
 const TOOL = {
   name: "paperclipAsk",
   description: "Send a request (question OR job) to Paperclip's Lead agent and wait for the answer. Returns Lead's answer text and the issue id.",
-  inputSchema: { type: "object", properties: { request: { type: "string", description: "The full request in plain words" }, title: { type: "string", description: "Short title (optional)" } }, required: ["request"] },
+  inputSchema: { type: "object", properties: { request: { type: "string", description: "The full request in plain words" }, title: { type: "string", description: "Short title (optional)" }, request_id: { type: "string", description: "Stable request ID; retries reuse this exact value" }, conversation_id: { type: "string", description: "Immutable originating conversation ID" } }, required: ["request"] },
 };
 
 /* ---------- Twenty CRM -> Paperclip ----------
@@ -102,7 +112,7 @@ export async function handleBridge(req: http.IncomingMessage, res: http.ServerRe
     const request = String(b.request ?? b.prompt ?? "").trim();
     if (!request) return send(res, 400, { error: "request is required" });
     try {
-      const r = await askPaperclipWait(request.slice(0, 20_000), String(b.source ?? "an app via NODE").slice(0, 60), b.title ? String(b.title) : undefined);
+      const r = await askPaperclipWait(request.slice(0, 20_000), String(b.source ?? "an app via NODE").slice(0, 60), b.title ? String(b.title) : undefined, bridgeMeta(b));
       return send(res, 200, r);
     } catch (e) { return send(res, 502, { error: (e as Error).message }); }
   }
@@ -120,7 +130,7 @@ export async function handleBridge(req: http.IncomingMessage, res: http.ServerRe
           if (m.params?.name !== "paperclipAsk") return { jsonrpc: "2.0", id, error: { code: -32602, message: "unknown tool" } };
           const a = m.params?.arguments ?? {};
           try {
-            const r = await askPaperclipWait(String(a.request ?? "").slice(0, 20_000), "an MCP client via NODE", a.title);
+            const r = await askPaperclipWait(String(a.request ?? "").slice(0, 20_000), "an MCP client via NODE", a.title, bridgeMeta(a));
             return reply({ content: [{ type: "text", text: `${r.issue} (${r.status}, ${r.seconds}s): ${r.answer}` }], isError: !r.ok && r.status !== "still_working" });
           } catch (e) { return reply({ content: [{ type: "text", text: `paperclipAsk failed: ${(e as Error).message}` }], isError: true }); }
         }
