@@ -1,0 +1,113 @@
+{
+  "schema": 1,
+  "runtime": {
+    "repo": "CultureReset/node-kit-runtime",
+    "commit": "58f25912f254240b6048e1fc2759ef482867335d"
+  },
+  "components": {
+    "approval": {
+      "repo": "CultureReset/approval-gateway",
+      "commit": "2dc1a6b204c4a8cdf70df2fdf9f857ef4d3a9ded",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "boxes": {
+      "repo": "CultureReset/Boxes",
+      "commit": "9ecb53a21eb1cb0de0bfb48c5b14c92431aaa843",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "bridge": {
+      "repo": "CultureReset/paperclip-approval-bridge",
+      "commit": "a1334f7b384fb9a0113d88b7b81a55832474340f",
+      "branch": "main",
+      "payload": "portable/payload"
+    },
+    "chat": {
+      "repo": "CultureReset/nextgent-chat",
+      "commit": "9f601bcd48665cc1e19ae697a5acc65f425adf09",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "chat-logger": {
+      "repo": "CultureReset/ai-chat-logger",
+      "commit": "7bfd63b4d2ff46df9342e73e8b05e93968d79748",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "door": {
+      "repo": "CultureReset/node-door",
+      "commit": "bac96a135c22c35966c0cbe93ee70063d9fa8b5f",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "grants": {
+      "repo": "CultureReset/node-approval-grants",
+      "commit": "ecd1e0edf0077bc2f1f29741f96db5ed760af7ff",
+      "branch": "main",
+      "payload": "portable/payload"
+    },
+    "health": {
+      "repo": "CultureReset/node-health",
+      "commit": "922ed7366a09efa36f7a593f5cf2b85b5784cfca",
+      "branch": "main",
+      "payload": "portable/payload"
+    },
+    "home": {
+      "repo": "CultureReset/node-home",
+      "commit": "58c0bb59d29e46c84ebdf05ad7a7d0fe39fb07d7",
+      "branch": "main",
+      "payload": "portable/payload"
+    },
+    "hub": {
+      "repo": "CultureReset/node-mcp-hub",
+      "commit": "cc60b69308cc00caf9277b7c338f9c88c6cc4630",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "pccall": {
+      "repo": "CultureReset/node-pccall",
+      "commit": "b8427e08426739930715cbd74ad08ec9adbca436",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "relay": {
+      "repo": "CultureReset/smsgw-relay",
+      "commit": "057961b8fb153f115be6c98aa18c21ec9cd561ef",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "sms": {
+      "repo": "CultureReset/nextgent-phone",
+      "commit": "ead833daf0e080fc4888fd8f7605105e03819a84",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "sms-door": {
+      "repo": "CultureReset/sms-door",
+      "commit": "f29f5aab31a9bf628053164a40906f4bd6426771",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    },
+    "tunnel": {
+      "repo": "CultureReset/node-tunnel",
+      "commit": "077a08ea442d5f0e3f330232e6c8c532b438c487",
+      "branch": "main",
+      "payload": "portable/payload"
+    },
+    "voice": {
+      "repo": "CultureReset/node-voice",
+      "commit": "081fba780c55dc1be5187ac1f0b36f819b830280",
+      "branch": "node-kit-portable-2026-11-07",
+      "payload": "portable/payload"
+    }
+  },
+  "architecture": "Separate modular MCP/API services; no Paperclip in-process consolidation",
+  "activation": "sources/config/disabled units only, never start services",
+  "full_stack_gates": [
+    "GitHub repo/fork creation now rate-limited HTTP403; UptimeKuma/cloudflared/Jarvis-send independent homes incomplete",
+    "Controller /api/nodes schema/auth unavailable; no registration request made",
+    "Model/provider credentials, phone/ADB pairing, passkey RP/recovery, private registries and data restore require owner provisioning",
+    "Not all existing legacy app runtimes have independent installer integration; do not claim full profile ready"
+  ]
+}

@@ -42,16 +42,26 @@ def fetch(repo, sha, target, prefix=''):
     return count
 
 if __name__ == '__main__':
-    import tempfile,sys,shutil,importlib.util
+    import tempfile,sys,shutil,importlib.util,json
     with tempfile.TemporaryDirectory(prefix='node-component-install-') as temporary:
         runtime=Path(temporary)
         fetch('CultureReset/node-kit-runtime','58f25912f254240b6048e1fc2759ef482867335d',runtime)
         target=runtime/'components'/'boxes'
         target.parent.mkdir(parents=True,exist_ok=True)
         shutil.copytree(Path(__file__).parent/'payload',target)
+        metadata=json.loads((runtime/'manifest.json').read_text())
+        locked=json.loads((Path(__file__).parent/'dependencies.lock.json').read_text())
+        wanted={'boxes'}
+        while True:
+            expanded=wanted|{dep for n in wanted for dep in metadata['components'][n].get('dependencies',[])}
+            if expanded==wanted:break
+            wanted=expanded
+        for dependency in sorted(wanted-{'boxes'}):
+            entry=locked['components'][dependency]
+            fetch(entry['repo'],entry['commit'],runtime/'components'/dependency,prefix=entry['payload'])
         sys.path.insert(0,str(runtime))
         spec=importlib.util.spec_from_file_location('node_kit_runtime',runtime/'kit.py')
         module=importlib.util.module_from_spec(spec);spec.loader.exec_module(module)
-        try:sys.exit(module.main(['boxes',*sys.argv[1:]]))
+        try:sys.exit(module.main([*sorted(wanted),*sys.argv[1:]]))
         except module.GateError as exc:
             print(str(exc),file=sys.stderr);sys.exit(2)
