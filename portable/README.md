@@ -1,6 +1,6 @@
 # Portable boxes
 
-Actual component source is portable/payload, not a remote MSI path or stub. Runtime pinned to CultureReset/node-kit-runtime@22b20a47c9592adc19af82f1e1bf3dd35a92c431. Own licenses preserved where supplied; otherwise private custom-source license/provenance remains unresolved (not relicensed). Existing upstream/history and unrelated files preserved.
+Actual component source is portable/payload, not a remote MSI path or stub. Runtime pinned to CultureReset/node-kit-runtime@58f25912f254240b6048e1fc2759ef482867335d. Own licenses preserved where supplied; otherwise private custom-source license/provenance remains unresolved (not relicensed). Existing upstream/history and unrelated files preserved.
 
 ```
 ./portable/install.sh --stage-root /tmp/node-boxes-stage

@@ -17,6 +17,8 @@ def fetch(repo, sha, target, prefix=''):
     with tarfile.open(fileobj=io.BytesIO(result.stdout), mode='r:gz') as archive:
         for member in archive.getmembers():
             parts = Path(member.name).parts[1:]
+            if not parts and member.isdir():
+                continue
             if '..' in parts or not parts:
                 raise ValueError('Unsafe archive path')
             path = '/'.join(parts)
@@ -43,7 +45,7 @@ if __name__ == '__main__':
     import tempfile,sys,shutil,importlib.util
     with tempfile.TemporaryDirectory(prefix='node-component-install-') as temporary:
         runtime=Path(temporary)
-        fetch('CultureReset/node-kit-runtime','22b20a47c9592adc19af82f1e1bf3dd35a92c431',runtime)
+        fetch('CultureReset/node-kit-runtime','58f25912f254240b6048e1fc2759ef482867335d',runtime)
         target=runtime/'components'/'boxes'
         target.parent.mkdir(parents=True,exist_ok=True)
         shutil.copytree(Path(__file__).parent/'payload',target)

@@ -1,7 +1,7 @@
 {
   "component": "boxes",
   "runtime_repo": "CultureReset/node-kit-runtime",
-  "runtime_commit": "22b20a47c9592adc19af82f1e1bf3dd35a92c431",
+  "runtime_commit": "58f25912f254240b6048e1fc2759ef482867335d",
   "payload": "portable/payload",
   "metadata": {
     "layout": "ang/src/boxes",
