@@ -7,97 +7,97 @@
   "components": {
     "approval": {
       "repo": "CultureReset/approval-gateway",
-      "commit": "2dc1a6b204c4a8cdf70df2fdf9f857ef4d3a9ded",
+      "commit": "671d38f2d8dbc399dfc23cfccc311bf71ba10c2a",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "boxes": {
       "repo": "CultureReset/Boxes",
-      "commit": "9ecb53a21eb1cb0de0bfb48c5b14c92431aaa843",
+      "commit": "abb42ea66921614d810e600db67af9445ec3c672",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "bridge": {
       "repo": "CultureReset/paperclip-approval-bridge",
-      "commit": "a1334f7b384fb9a0113d88b7b81a55832474340f",
+      "commit": "700b0e3fea148e9b12eb278644f38bdaf1b71753",
       "branch": "main",
       "payload": "portable/payload"
     },
     "chat": {
       "repo": "CultureReset/nextgent-chat",
-      "commit": "9f601bcd48665cc1e19ae697a5acc65f425adf09",
+      "commit": "06fd8246ae04cfb60481c0968e066933463b0b75",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "chat-logger": {
       "repo": "CultureReset/ai-chat-logger",
-      "commit": "7bfd63b4d2ff46df9342e73e8b05e93968d79748",
+      "commit": "5096a145d1bb90a9a19c1aefdfa5736ac3694188",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "door": {
       "repo": "CultureReset/node-door",
-      "commit": "bac96a135c22c35966c0cbe93ee70063d9fa8b5f",
+      "commit": "ce02a09cf193c8dffa4a6e4b76ba16ff42805df9",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "grants": {
       "repo": "CultureReset/node-approval-grants",
-      "commit": "ecd1e0edf0077bc2f1f29741f96db5ed760af7ff",
+      "commit": "c5d698abac9d0b4ef5e4b2a4bb93bc050eebd874",
       "branch": "main",
       "payload": "portable/payload"
     },
     "health": {
       "repo": "CultureReset/node-health",
-      "commit": "922ed7366a09efa36f7a593f5cf2b85b5784cfca",
+      "commit": "eb1da6722d4eaf8819e7f5caac94476aeb7544cf",
       "branch": "main",
       "payload": "portable/payload"
     },
     "home": {
       "repo": "CultureReset/node-home",
-      "commit": "58c0bb59d29e46c84ebdf05ad7a7d0fe39fb07d7",
+      "commit": "8167e0909bb38b0c18044f057d81805d2cc40da8",
       "branch": "main",
       "payload": "portable/payload"
     },
     "hub": {
       "repo": "CultureReset/node-mcp-hub",
-      "commit": "cc60b69308cc00caf9277b7c338f9c88c6cc4630",
+      "commit": "4add20389c5310fef04a508168746cc6e2140a81",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "pccall": {
       "repo": "CultureReset/node-pccall",
-      "commit": "b8427e08426739930715cbd74ad08ec9adbca436",
+      "commit": "882be56b8d763d85c25be86f6d8ab59d7065f021",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "relay": {
       "repo": "CultureReset/smsgw-relay",
-      "commit": "057961b8fb153f115be6c98aa18c21ec9cd561ef",
+      "commit": "1e8b11d7fb25e395110d891bb7754686c0338d2f",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "sms": {
       "repo": "CultureReset/nextgent-phone",
-      "commit": "ead833daf0e080fc4888fd8f7605105e03819a84",
+      "commit": "ff452a5e64cfa715e4ce1cfa036005be8a45831c",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "sms-door": {
       "repo": "CultureReset/sms-door",
-      "commit": "f29f5aab31a9bf628053164a40906f4bd6426771",
+      "commit": "b840f6fa704c660c57fe1df102718d437b49e1b5",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     },
     "tunnel": {
       "repo": "CultureReset/node-tunnel",
-      "commit": "077a08ea442d5f0e3f330232e6c8c532b438c487",
+      "commit": "bf58be6fe5a76a486d22ce8f2c79f590abc36b86",
       "branch": "main",
       "payload": "portable/payload"
     },
     "voice": {
       "repo": "CultureReset/node-voice",
-      "commit": "081fba780c55dc1be5187ac1f0b36f819b830280",
+      "commit": "efb6a2c11b9ed06956b9a9efd1eb7bd4babe2085",
       "branch": "node-kit-portable-2026-11-07",
       "payload": "portable/payload"
     }
