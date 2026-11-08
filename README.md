@@ -1,3 +1,5 @@
+> Portable, pinned, disabled-by-default installer/source: [portable/README.md](portable/README.md). Use that path for Nov7 snapshot; historical text below is not an activation plan.
+
 # NODE (Boxes)
 
 A Linux computer the owner talks to. Everything on screen, nothing in a terminal.

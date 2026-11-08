@@ -1,0 +1,219 @@
+import { has, run, stream } from "../exec.js";
+import { isDemo } from "./status.js";
+import { check, type FeatureStatus } from "./features.js";
+import * as flathub from "./providers/flathub.js";
+import { createJob, appendLine, finishJob } from "./jobs.js";
+import { refreshAppsCache } from "./apps.js";
+import { HttpError } from "../router.js";
+import type { Job } from "../types.js";
+
+export interface Package {
+  name: string;
+  version: string;
+  description: string;
+  repo: string;
+  installed: boolean;
+  /** Which real source this came from, and the id to install by. */
+  source: "flathub" | "pacman" | "apt";
+  appId?: string;
+  icon?: string;
+}
+
+export interface PackageResult {
+  status: FeatureStatus;
+  packages: Package[];
+}
+
+const NAME_RE = /^[a-z0-9@._+-]+$/i;
+
+let updatesCache: { at: number; count: number | null } | null = null;
+
+/**
+ * Count of pending updates, or null when this machine cannot be asked.
+ * "None" and "cannot tell" are different answers and the UI shows both.
+ * Cached for 15 minutes; checkupdates hits the network.
+ */
+export async function updatesCount(): Promise<number | null> {
+  if (updatesCache && Date.now() - updatesCache.at < 15 * 60_000) return updatesCache.count;
+  let count: number | null = null;
+  if (await has("checkupdates")) {
+    const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
+    count = r.stdout.trim() ? r.stdout.trim().split("\n").length : 0;
+  } else if (await has("apt")) {
+    const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+    count = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).length;
+  } else if (await isDemo()) count = 3;
+  updatesCache = { at: Date.now(), count };
+  return count;
+}
+
+/** Zero updates and "cannot check" are different things; the UI says which. */
+export async function updatesStatus(): Promise<FeatureStatus> {
+  if (await has("checkupdates")) return check("checkupdates");
+  if (await has("apt")) return { available: true, demo: false, tool: "apt" };
+  return { available: false, demo: false, tool: "packages", install: "apt or pacman", reason: "No supported native package manager was found." };
+}
+
+export async function listUpdates(): Promise<PackageResult> {
+  const f = await updatesStatus();
+  if (!f.available) return { status: f, packages: [] };
+  if (f.demo) {
+    return { status: f, packages: [
+      { name: "linux", version: "6.18.2 → 6.18.4", description: "The Linux kernel", repo: "core", installed: true, source: "pacman" },
+      { name: "chromium", version: "140.0 → 140.1", description: "Web browser", repo: "extra", installed: true, source: "pacman" },
+      { name: "omarchy", version: "3.4.1 → 3.5.0", description: "Omarchy", repo: "omarchy", installed: true, source: "pacman" },
+    ] };
+  }
+  if (await has("checkupdates")) {
+    const r = await run("checkupdates", ["--nocolor"], { timeout: 20000 });
+    return { status: f, packages: r.stdout.trim().split("\n").filter(Boolean).map((line) => {
+      const [name, from, , to] = line.split(/\s+/);
+      return { name, version: `${from} → ${to}`, description: "", repo: "", installed: true, source: "pacman" as const };
+    }) };
+  }
+  const r = await run("apt", ["list", "--upgradable"], { timeout: 20000, env: { LC_ALL: "C" } });
+  const packages = r.stdout.split("\n").filter((line) => line.includes("/") && /upgradable from:/i.test(line)).map((line) => {
+    const m = line.match(/^([^/]+)\/\S+\s+(\S+).*\[upgradable from: ([^\]]+)\]/i);
+    return { name: m?.[1] ?? line.split("/")[0], version: m ? `${m[3]} → ${m[2]}` : "", description: "", repo: "apt", installed: true, source: "apt" as const };
+  });
+  return { status: f, packages };
+}
+
+/**
+ * The store reads real catalogues: Flathub over its public API (works on any
+ * distribution, and is what a freshly installed machine sees) and pacman when
+ * the machine has it. Nothing here is a list typed into the source code.
+ */
+export async function searchPackages(q: string): Promise<PackageResult> {
+  const needle = q.trim().toLowerCase();
+  const fromFlathub = (needle ? await flathub.search(needle) : await flathub.popular()).map((a) => ({
+    name: a.name,
+    version: a.developer ?? "Flathub",
+    description: a.summary,
+    repo: "flathub",
+    installed: a.installed,
+    source: "flathub" as const,
+    appId: a.id,
+    icon: a.icon,
+  }));
+  const f = await check("pacman");
+  if (!f.available && await has("apt")) {
+    if (!needle) return { status: { available: true, demo: false, tool: "apt" }, packages: fromFlathub };
+    const installedRaw = await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"], { timeout: 15000 });
+    const installed = new Set(installedRaw.stdout.split("\n").map((n) => n.replace(/:.*$/, "")));
+    const r = await run("apt-cache", ["search", "--names-only", needle], { timeout: 15000, env: { LC_ALL: "C" } });
+    const out: Package[] = r.stdout.split("\n").filter(Boolean).slice(0, 40).map((line) => {
+      const [name, ...rest] = line.split(" - ");
+      return { name, version: "", description: rest.join(" - "), repo: "apt", installed: installed.has(name), source: "apt" as const };
+    });
+    return { status: { available: true, demo: false, tool: "apt" }, packages: [...out, ...fromFlathub] };
+  }
+  if (!f.available) {
+    // No pacman is fine as long as Flathub answered; only both failing is a dead end.
+    if (fromFlathub.length > 0) return { status: { available: true, demo: false }, packages: fromFlathub };
+    return { status: { available: false, demo: false, tool: "flatpak", install: "flatpak", reason: "The App Store needs either flatpak (for Flathub) or pacman, and could not reach a catalogue." }, packages: [] };
+  }
+  if (!needle) return { status: f, packages: [...(await featured()), ...fromFlathub] };
+  const installed = new Set((await run("pacman", ["-Qq"])).stdout.split("\n"));
+  const r = await run("pacman", ["-Ss", needle], { timeout: 15000 });
+  const out: Package[] = [];
+  const lines = r.stdout.split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(/^(\S+)\/(\S+)\s+(\S+)/);
+    if (!m) continue;
+    const description = (lines[i + 1] ?? "").trim();
+    out.push({ repo: m[1], name: m[2], version: m[3], description, installed: installed.has(m[2]), source: "pacman" });
+  }
+  return { status: f, packages: [...out.slice(0, 40), ...fromFlathub] };
+}
+
+/**
+ * Native picks for an empty search box, taken from the package lists Omarchy
+ * actually ships rather than a list invented here. No Omarchy, no native
+ * picks: Flathub carries the store on its own.
+ */
+async function featured(): Promise<Package[]> {
+  const { readFile } = await import("node:fs/promises");
+  const { OMARCHY_PATH } = await import("../paths.js");
+  const names = new Set<string>();
+  for (const file of ["install/omarchy-other.packages", "install/omarchy-base.packages"]) {
+    try {
+      const text = await readFile(`${OMARCHY_PATH}/${file}`, "utf8");
+      for (const line of text.split("\n")) {
+        const n = line.trim();
+        if (n && !n.startsWith("#") && NAME_RE.test(n)) names.add(n);
+      }
+    } catch {
+      /* Omarchy is not installed here */
+    }
+  }
+  if (names.size === 0) return [];
+  const installed = new Set((await run("pacman", ["-Qq"])).stdout.split("\n"));
+  const out: Package[] = [];
+  for (const name of [...names].filter((n) => !installed.has(n)).slice(0, 24)) {
+    const r = await run("pacman", ["-Si", name]);
+    if (!r.ok) continue;
+    const get = (k: string) => r.stdout.match(new RegExp(`^${k}\\s*:\\s*(.+)$`, "m"))?.[1]?.trim() ?? "";
+    out.push({ name, version: get("Version"), description: get("Description"), repo: get("Repository"), installed: false, source: "pacman" });
+  }
+  return out;
+}
+
+export async function installedPackages(): Promise<string[]> {
+  if (await has("pacman")) return (await run("pacman", ["-Qeq"])).stdout.trim().split("\n");
+  if (await has("dpkg-query")) return (await run("dpkg-query", ["-W", "-f=${binary:Package}\\n"])).stdout.trim().split("\n");
+  return [];
+}
+
+/**
+ * Install or remove a package as a background job. Privilege comes from pkexec
+ * (polkit shows the system password dialog), never from a stored password.
+ */
+/**
+ * Install or remove, routed to whichever real source owns the id. A Flathub
+ * app id goes to flatpak (user scope, no root); anything else goes to pacman
+ * through pkexec so polkit shows the system password dialog.
+ */
+export async function packageJob(action: "install" | "remove" | "update", name?: string, source?: "flathub" | "pacman" | "apt"): Promise<Job> {
+  if (source === "flathub" || (name && source !== "pacman" && name.includes(".") && flathub.validId(name) && action !== "update")) {
+    const f = await flathub.status();
+    if (!f.available) throw new HttpError(503, f.reason!);
+    return flathub.install(name!, action === "remove");
+  }
+  if (name && !NAME_RE.test(name)) throw new HttpError(400, "Invalid package name");
+  const native = source === "apt" || (!(await has("pacman")) && await has("apt")) ? "apt" : "pacman";
+  const f = native === "apt" ? { available: true, demo: false, tool: "apt" } : await check("pacman");
+  if (!f.available) throw new HttpError(503, f.reason!);
+  const title = action === "update" ? "Updating everything" : `${action === "install" ? "Installing" : "Removing"} ${name}`;
+  const job = createJob(action, title, { name });
+  void (async () => {
+    if (await isDemo()) {
+      for (const l of ["resolving dependencies...", "looking for conflicting packages...", `${action === "remove" ? "removing" : "installing"} ${name ?? "packages"}...`, "running post-transaction hooks...", "done"]) {
+        appendLine(job, l);
+        await new Promise((r) => setTimeout(r, 500));
+      }
+      finishJob(job, true);
+      return;
+    }
+    let cmd: string;
+    let args: string[];
+    if (native === "apt") {
+      cmd = "pkexec";
+      args = action === "remove" ? ["apt-get", "remove", "-y", name!] : action === "update" ? ["apt-get", "upgrade", "-y"] : ["apt-get", "install", "-y", name!];
+    } else if (action === "update" && (await has("omarchy-update"))) {
+      cmd = "omarchy-update";
+      args = [];
+    } else if (action === "install" && (await has("omarchy-pkg-install"))) {
+      cmd = "pkexec";
+      args = ["pacman", "-S", "--noconfirm", "--needed", name!];
+    } else {
+      cmd = "pkexec";
+      args = action === "remove" ? ["pacman", "-Rns", "--noconfirm", name!] : action === "update" ? ["pacman", "-Syu", "--noconfirm"] : ["pacman", "-S", "--noconfirm", "--needed", name!];
+    }
+    const code = await stream(cmd, args, (line) => appendLine(job, line));
+    finishJob(job, code === 0);
+    updatesCache = null;
+    await refreshAppsCache();
+  })();
+  return job;
+}

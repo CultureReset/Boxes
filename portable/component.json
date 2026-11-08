@@ -1,0 +1,18 @@
+{
+  "component": "boxes",
+  "runtime_repo": "CultureReset/node-kit-runtime",
+  "runtime_commit": "22b20a47c9592adc19af82f1e1bf3dd35a92c431",
+  "payload": "portable/payload",
+  "metadata": {
+    "layout": "ang/src/boxes",
+    "entrypoint": "daemon/dist/index.js",
+    "runtime": "node",
+    "port": 7770,
+    "health_path": "/api/health",
+    "health_verified_in_source": false,
+    "activation": "manual explicit per-box enabled flag; never enabled by installer",
+    "dependencies": [],
+    "license": "MIT"
+  },
+  "provenance": "Sanitized installed-source snapshot from Nov7; exact private source receipt remains on owner machine. NOT claim of upstream version parity."
+}
