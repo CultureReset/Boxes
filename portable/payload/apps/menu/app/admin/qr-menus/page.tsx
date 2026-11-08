@@ -408,7 +408,7 @@ export default function QrMenusAdminPage() {
                     value={restaurant.phone}
                     onChange={(event) => updateRestaurant('phone', event.target.value)}
                     className="w-full rounded-lg border border-slate-300 px-4 py-2 focus:border-blue-500 focus:outline-none focus:ring-2 focus:ring-blue-200"
-                    placeholder="(555) 123-4567"
+                              placeholder="Phone number"
                   />
                 </label>
                 <label className="space-y-2">
