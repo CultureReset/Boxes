@@ -26,7 +26,7 @@ export function frames(): Frame[] {
 /** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
 const FRAME_ANCESTORS = (
   process.env.NODEOS_FRAME_ANCESTORS
-  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
+  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
 ).trim();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
@@ -120,4 +120,34 @@ function start(f: Frame): void {
 
 export function startFrameProxies(): void {
   for (const f of frames()) start(f);
+}
+
+
+/** Same-origin path under NODE: /frame/<slug>/... → loopback frame proxy (or upstream).
+ *  Lets an iframe stay on NODE's origin. Asset-absolute apps (Vite at base `/`) still
+ *  need the Tailscale :servePort URL; set NODEOS_FRAME_SAME_ORIGIN=1 only when the
+ *  app is built with base `/frame/<slug>/`.
+ */
+export async function handleSameOriginFrame(req: http.IncomingMessage, res: http.ServerResponse): Promise<boolean> {
+  const raw = req.url ?? "/";
+  const m = raw.match(/^\/frame\/([a-z0-9-]+)(\/.*)?(?:\?.*)?$/i);
+  if (!m) return false;
+  const slug = m[1];
+  const f = frames().find((x) => x.slug === slug);
+  if (!f) { res.writeHead(404, { "content-type": "text/plain" }); res.end(`unknown frame app: ${slug}`); return true; }
+  if (!(await requireDoor(req, res, true))) return true;
+  const q = raw.includes("?") ? raw.slice(raw.indexOf("?")) : "";
+  const rest = (m[2] && m[2] !== "") ? m[2] : "/";
+  const targetPath = rest + q;
+  const up = new URL(f.upstream);
+  const useLocal = Boolean(f.localPort);
+  const host = useLocal ? "127.0.0.1" : up.hostname;
+  const port = useLocal ? f.localPort : Number(up.port || 80);
+  const p = http.request({ host, port, method: req.method, path: targetPath, headers: upstreamHeaders(f, req.headers), localAddress: useLocal ? undefined : f.localAddress }, (r) => {
+    res.writeHead(r.statusCode ?? 502, r.statusMessage, fixHeaders(r.headers));
+    r.pipe(res);
+  });
+  p.on("error", (e) => { if (!res.headersSent) res.writeHead(502, { "content-type": "text/plain" }); res.end(`${slug} is not reachable: ${e.message}`); });
+  req.pipe(p);
+  return true;
 }

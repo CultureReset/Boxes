@@ -1,6 +1,6 @@
 import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
-import { startFrameProxies } from "./frameproxy.js";
+import { startFrameProxies, handleSameOriginFrame } from "./frameproxy.js";
 import { requireDoor } from "./doorauth.js";
 import http from "node:http";
 import path from "node:path";
@@ -465,6 +465,7 @@ const server = http.createServer(async (req, res) => {
   // have run for requests that arrived WITH an Origin header — which the shell
   // does not send. Every API call from the shell would have fallen through to
   // serveStatic and come back as HTML.
+  if (req.url?.startsWith("/frame/")) { if (await handleSameOriginFrame(req, res)) return; }
   if (req.url?.startsWith("/api/windows/stream")) return streamWindow(req, res);
   if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });

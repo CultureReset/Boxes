@@ -1,6 +1,5 @@
 import { api } from "../api/client";
 import type { AppEntry, WindowEntry } from "../api/types";
-import { nativeFor } from "../native/NativeApp";
 
 /** Everything opens INSIDE the NODE app: the REAL web app UI in a fullscreen
  *  frame (phone-launcher style), or a live view of a desktop window.
@@ -11,19 +10,8 @@ export type AppViewTarget =
   | { kind: "native"; slug: string; title: string };
 
 export function showAppView(t: AppViewTarget): void {
-  // Do not auto-redirect real https://*.voicecommandapi.com apps into native
-  // summary widgets — Matt wants the full app UI. nativeFor still maps legacy
-  // Tailscale:port URLs when someone deep-links them without a frame intent.
-  if (t.kind === "web") {
-    try {
-      const u = new URL(t.url, location.href);
-      const isAccessApp = u.hostname.endsWith(".voicecommandapi.com");
-      if (!isAccessApp) {
-        const slug = nativeFor(t.url);
-        if (slug) t = { kind: "native", slug, title: t.title };
-      }
-    } catch { /* keep web */ }
-  }
+  // Keep web targets as real iframes (frame-proxy / same-origin / Access URL).
+  // Auto-rewriting to native summary widgets blanked OpenJarvis on the phone.
   window.dispatchEvent(new CustomEvent<AppViewTarget>("node:app-view", { detail: t }));
 }
 
