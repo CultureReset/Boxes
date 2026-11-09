@@ -4,3 +4,6 @@ dist/
 .env
 .env.local
 *.log
+
+# Local edit backups (kept out of git)
+_backups/
