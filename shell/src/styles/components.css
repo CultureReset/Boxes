@@ -1235,8 +1235,10 @@ html {
   --gutter: clamp(32px, 3.4vw, 64px);
   --tile-gap: 18px;
 }
-.tv body {
-  cursor: none;
+@media (hover: none), (pointer: none) {
+  .tv body {
+    cursor: none;
+  }
 }
 .tv .main {
   scrollbar-width: none;

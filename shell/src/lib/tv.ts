@@ -12,5 +12,5 @@ export function detectTv(): boolean {
 
 export function applyTv(on: boolean, scale = 1): void {
   document.documentElement.classList.toggle("tv", on);
-  document.documentElement.style.setProperty("--ui-scale", String(on ? Math.max(scale, 1.2) : scale));
+  document.documentElement.style.setProperty("--ui-scale", String(on ? scale : scale));
 }
