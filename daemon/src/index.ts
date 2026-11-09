@@ -31,6 +31,7 @@ import { listProviders, personasForWorld, ask } from "./modules/agents.js";
 import { listWorlds, switchWorld, saveWorld, deleteWorld, type World } from "./modules/worlds.js";
 import { weather } from "./modules/weather.js";
 import { servicesReport, healthReport } from "./modules/services.js";
+import { systemStats, topProcesses, containerStats, serviceStats } from "./modules/sysmon.js";
 import { controlList, controlOne, controlAction } from "./modules/control.js";
 import { check } from "./modules/features.js";
 import { TEMPLATES, listAutomations, saveAutomation, deleteAutomation, runAutomation, startScheduler } from "./modules/automations.js";
@@ -217,6 +218,10 @@ api.get("/api/icon/:name", async ({ params, res }) => {
 // ---- Windows (Hyprland) ------------------------------------------------
 api.get("/api/services", () => servicesReport());
 api.get("/api/health", () => healthReport());
+api.get("/api/system/stats", () => systemStats());
+api.get("/api/system/processes", ({ query }) => topProcesses(Number(query.get("limit") ?? 25)));
+api.get("/api/system/containers", () => containerStats());
+api.get("/api/system/services", () => serviceStats());
 api.get("/api/control", () => controlList());
 api.get("/api/control/:id", ({ params }) => controlOne(params.id));
 api.post("/api/control/:id/:action", ({ params }) => controlAction(params.id, params.action));
