@@ -237,7 +237,7 @@ export interface HomeRow {
   enabled: boolean;
 }
 
-export type Look = "dashboard" | "living" | "cinema";
+export type Look = "clean" | "dashboard" | "living" | "cinema";
 
 export interface Layout {
   rows: HomeRow[];

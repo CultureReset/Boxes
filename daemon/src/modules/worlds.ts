@@ -12,7 +12,7 @@ import { HttpError } from "../router.js";
  * Switching is instant and everything on screen follows.
  */
 export type WorldKind = "personal" | "family" | "business" | "work" | "public" | "person";
-export type Look = "dashboard" | "living" | "cinema";
+export type Look = "clean" | "dashboard" | "living" | "cinema";
 
 export interface Shortcut {
   id: string;
@@ -53,9 +53,9 @@ function defaults(): { active: string; worlds: World[] } {
   return {
     active: "personal",
     worlds: [
-      { id: "personal", name: "Personal", kind: "personal", color: "#0a84ff", tagline: "Your life, your rules.", look: "dashboard", apps: null, agents: null, shortcuts: DEFAULT_SHORTCUTS },
+      { id: "personal", name: "Personal", kind: "personal", color: "#0a84ff", tagline: "Your life, your rules.", look: "clean", apps: null, agents: null, shortcuts: DEFAULT_SHORTCUTS },
       { id: "family", name: "Family", kind: "family", color: "#30d158", tagline: "Shared with family.", look: "living", apps: null, agents: ["general", "booking", "health", "music", "travel", "shopping", "files"], shortcuts: DEFAULT_SHORTCUTS.filter((s) => s.id !== "work").map((s) => (s.id === "family" ? { ...s, label: "Everyone", action: { type: "screen", target: "settings/worlds" } } : s)) },
-      { id: "business", name: "Business", kind: "business", color: "#ff9f0a", tagline: "Your company.", look: "dashboard", apps: null, agents: ["general", "email", "booking", "social", "finance", "research", "browser", "verification", "business", "developer", "files"], shortcuts: [
+      { id: "business", name: "Business", kind: "business", color: "#ff9f0a", tagline: "Your company.", look: "clean", apps: null, agents: ["general", "email", "booking", "social", "finance", "research", "browser", "verification", "business", "developer", "files"], shortcuts: [
         { id: "email", label: "Email", icon: "mail", color: "#ea4335", action: { type: "agent", target: "email" } },
         { id: "finance", label: "Finance", icon: "bar-chart", color: "#30d158", action: { type: "agent", target: "finance" } },
         { id: "social", label: "Social", icon: "share", color: "#0a84ff", action: { type: "agent", target: "social" } },

@@ -50,7 +50,7 @@ export async function setLayout(input: Partial<Layout>): Promise<Layout> {
     if (rows.length === 0) throw new HttpError(400, "At least one row is required");
     await rowsStore.write({ rows });
   }
-  if (input.look && ["dashboard", "living", "cinema"].includes(input.look)) await saveWorld({ id: (await activeWorld()).id, look: input.look });
+  if (input.look && ["clean", "dashboard", "living", "cinema"].includes(input.look)) await saveWorld({ id: (await activeWorld()).id, look: input.look });
   const scale = typeof input.scale === "number" && input.scale >= 0.8 && input.scale <= 1.6 ? input.scale : current.scale;
   const tv = input.tv === undefined ? current.tv : input.tv === null ? null : Boolean(input.tv);
   const weatherLocation = typeof input.weatherLocation === "string" ? input.weatherLocation.slice(0, 80) : current.weatherLocation;

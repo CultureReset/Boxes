@@ -6,6 +6,7 @@ import App from "./App";
 import "./styles/tokens.css";
 import "./styles/base.css";
 import "./styles/components.css";
+import "./styles/clean.css";
 
 if ("serviceWorker" in navigator && (import.meta as unknown as { env?: { PROD?: boolean } }).env?.PROD) {
   window.addEventListener("load", () => void navigator.serviceWorker.register("/sw.js").catch(() => {}));

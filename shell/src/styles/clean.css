@@ -1,0 +1,261 @@
+/* Clean sectioned home + MagicMirror-style TV board.
+   All dimensions are fluid (clamp / vw / vh). Nothing is tied to one screen size. */
+
+/* ---- Desktop sidebar for the clean look ---- */
+@media (min-width: 1100px) {
+  html.look-clean:not(.tv) .frame {
+    display: grid;
+    grid-template-columns: minmax(12rem, 15rem) 1fr;
+    grid-template-rows: auto auto 1fr auto;
+    grid-template-areas:
+      "side top"
+      "side banner"
+      "side main"
+      "side ask";
+  }
+  html.look-clean:not(.tv) .topbar { grid-area: top; }
+  html.look-clean:not(.tv) .desktop-offline,
+  html.look-clean:not(.tv) .demo-banner { grid-area: banner; }
+  html.look-clean:not(.tv) .main { grid-area: main; }
+  html.look-clean:not(.tv) .askbar,
+  html.look-clean:not(.tv) .chatpanel { grid-area: ask; }
+  html.look-clean:not(.tv) .topbar .tabs { display: none; }
+  html.look-clean:not(.tv) .clean-sidebar {
+    grid-area: side;
+    display: flex;
+    flex-direction: column;
+    gap: 0.2rem;
+    padding: 1.15rem 0.85rem 1.5rem;
+    border-right: 1px solid var(--line);
+    background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent 40%);
+  }
+  html.look-clean:not(.tv) .clean-sidebar .wordmark {
+    font-weight: 700;
+    letter-spacing: 0.18em;
+    font-size: 0.85rem;
+    padding: 0.4rem 0.75rem 1.1rem;
+    background: none;
+    border: 0;
+    color: var(--text);
+    text-align: left;
+  }
+  html.look-clean:not(.tv) .clean-sidebar button.nav {
+    display: flex;
+    align-items: center;
+    gap: 0.7rem;
+    width: 100%;
+    border: 0;
+    background: transparent;
+    color: var(--text-2);
+    font: inherit;
+    font-size: 0.95rem;
+    padding: 0.62rem 0.75rem;
+    border-radius: var(--r-sm);
+    text-align: left;
+    cursor: pointer;
+  }
+  html.look-clean:not(.tv) .clean-sidebar button.nav.active,
+  html.look-clean:not(.tv) .clean-sidebar button.nav:hover {
+    background: var(--glass-strong);
+    color: var(--text);
+  }
+}
+.clean-sidebar { display: none; }
+
+html.look-clean:not(.tv) .clean-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 0.65rem;
+  margin: 0.35rem 0 0.15rem;
+}
+html.look-clean:not(.tv) .clean-actions > * {
+  margin: 0 !important;
+  flex: 1 1 16rem;
+}
+html.look-clean:not(.tv) .main {
+  padding-bottom: calc(var(--ask-h, 96px) + 88px);
+}
+@media (max-width: 840px) {
+  html.look-clean:not(.tv) .clean-actions { display: block; }
+  html.look-clean:not(.tv) .clean-actions > * { margin: 8px 0 !important; }
+  html.look-clean:not(.tv) .main {
+    padding-bottom: calc(var(--ask-h, 150px) + 80px);
+  }
+}
+
+
+/* ---- Phone / desktop clean home ---- */
+.clean-home {
+  display: flex;
+  flex-direction: column;
+  gap: clamp(1.25rem, 2.4vw, 2.25rem);
+  padding-bottom: 1rem;
+  max-width: 72rem;
+}
+.clean-hero {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 1.25rem;
+  flex-wrap: wrap;
+}
+.clean-kicker { color: var(--text-3); font-size: clamp(0.8rem, 1.2vw, 0.95rem); margin-bottom: 0.3rem; }
+.clean-hero h1 {
+  font-family: var(--font-display);
+  font-size: clamp(1.7rem, 3.6vw, 2.7rem);
+  letter-spacing: -0.03em;
+  line-height: 1.1;
+  margin: 0;
+  font-weight: 650;
+}
+.clean-tag { color: var(--text-2); margin: 0.45rem 0 0; font-size: clamp(0.9rem, 1.3vw, 1.05rem); }
+.clean-weather {
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: 0.7rem 1rem; color: inherit; cursor: pointer;
+}
+.clean-temp { font-size: clamp(1.6rem, 3vw, 2.2rem); font-weight: 650; letter-spacing: -0.03em; }
+.clean-weather-meta { display: flex; flex-direction: column; align-items: flex-start; font-size: 0.85rem; color: var(--text-2); }
+.clean-section-h {
+  display: flex; align-items: baseline; justify-content: space-between;
+  margin-bottom: 0.7rem;
+}
+.clean-section-h h2 { font-size: clamp(1.05rem, 1.6vw, 1.25rem); margin: 0; font-weight: 600; }
+.clean-section-h h3, .clean-app-group h3 {
+  font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em;
+  color: var(--text-3); margin: 0.6rem 0 0.5rem; font-weight: 600;
+}
+.clean-today, .clean-agents, .clean-apps, .clean-vitals {
+  display: grid;
+  gap: clamp(0.6rem, 1.2vw, 0.9rem);
+}
+.clean-today { grid-template-columns: repeat(auto-fit, minmax(min(100%, 14rem), 1fr)); }
+.clean-agents { grid-template-columns: repeat(auto-fit, minmax(min(100%, 16rem), 1fr)); }
+.clean-apps { grid-template-columns: repeat(auto-fill, minmax(min(100%, 8.5rem), 1fr)); }
+.clean-vitals { grid-template-columns: repeat(auto-fit, minmax(min(100%, 10rem), 1fr)); }
+.clean-card, .clean-agent, .clean-app, .clean-row, .clean-vital {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--r-md);
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+}
+.clean-card, .clean-agent { display: flex; flex-direction: column; gap: 0.25rem; align-items: flex-start; padding: 1rem 1.05rem; }
+.clean-card .t, .clean-agent .t, .clean-app .t, .clean-row .t, .clean-vital .t { font-weight: 600; }
+.clean-card .s, .clean-agent .s, .clean-app .s, .clean-row .s { color: var(--text-3); font-size: 0.85rem; }
+.clean-agent { flex-direction: row; align-items: center; gap: 0.8rem; }
+.clean-app {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.35rem;
+  padding: 0.85rem;
+}
+.clean-app .app-icon, .clean-app img { width: 2.2rem; height: 2.2rem; border-radius: 0.55rem; }
+.clean-personas { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.7rem; }
+.clean-chip {
+  border: 1px solid var(--line); background: var(--glass); color: var(--text-2);
+  border-radius: var(--r-pill); padding: 0.3rem 0.7rem; font: inherit; font-size: 0.82rem; cursor: pointer;
+}
+.clean-list { display: flex; flex-direction: column; gap: 0.45rem; }
+.clean-row { display: flex; align-items: center; gap: 0.75rem; padding: 0.8rem 0.95rem; width: 100%; }
+.clean-row .stack { flex: 1; display: flex; flex-direction: column; }
+.clean-row .pill, .clean-list .pill {
+  font-size: 0.72rem; padding: 0.15rem 0.5rem; border-radius: var(--r-pill);
+  background: var(--blue-soft); color: var(--text-2);
+}
+.clean-vital { padding: 0.8rem 0.9rem; display: flex; flex-direction: column; gap: 0.25rem; cursor: default; }
+.clean-vital-l { display: flex; align-items: center; gap: 0.35rem; color: var(--text-3); font-size: 0.78rem; }
+.clean-sys-note { font-size: 0.8rem; margin: 0.6rem 0 0; }
+
+/* ---- TV ambient board ---- */
+html.tv .tabbar,
+html.tv .askbar,
+html.tv .askbar-wrap,
+html.tv .chatpanel,
+html.tv .topbar,
+html.tv .clean-sidebar,
+html.tv .demo-banner,
+html.tv .desktop-offline { display: none !important; }
+html.tv .frame { display: block; }
+html.tv .main { padding: clamp(1rem, 3vh, 2.5rem); min-height: 100dvh; }
+
+.tv-display {
+  display: grid;
+  gap: clamp(0.8rem, 1.6vw, 1.5rem);
+  grid-template-columns: 1.2fr 1fr 1fr;
+  grid-template-areas:
+    "clock agenda agents"
+    "clock vitals alerts";
+  min-height: calc(100dvh - 2rem);
+  align-content: stretch;
+}
+.tv-clock-col { grid-area: clock; display: flex; flex-direction: column; justify-content: center; padding-right: clamp(0.5rem, 2vw, 2rem); }
+.tv-agenda { grid-area: agenda; }
+.tv-agents { grid-area: agents; }
+.tv-vitals { grid-area: vitals; }
+.tv-alerts { grid-area: alerts; }
+.tv-display > div:not(.tv-clock-col) {
+  background: var(--glass);
+  border: 1px solid var(--line);
+  border-radius: var(--r-lg);
+  padding: min(2.6vh, 1.8vw);
+  min-height: 0;
+}
+.tv-display h2 {
+  margin: 0 0 0.7rem;
+  font-size: min(2.2vh, 1.6vw);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-3);
+  font-weight: 600;
+}
+.tv-date { color: var(--text-2); font-size: min(3.2vh, 2.4vw); }
+.tv-clock { display: flex; align-items: baseline; gap: 0.28em; line-height: 0.95; white-space: nowrap; }
+.tv-time {
+  font-size: min(18vh, 14vw);
+  font-weight: 650;
+  letter-spacing: -0.05em;
+  font-variant-numeric: tabular-nums;
+}
+.tv-clock-side { display: flex; flex-direction: column; justify-content: flex-end; line-height: 1.05; padding-bottom: 0.12em; }
+.tv-ampm, .tv-sec { font-size: min(4.2vh, 3.2vw); color: var(--text-3); font-variant-numeric: tabular-nums; text-transform: uppercase; }
+.tv-greet { margin-top: 0.6rem; font-size: min(3.6vh, 2.6vw); color: var(--text-2); }
+.tv-weather {
+  margin-top: clamp(1rem, 3vh, 2rem);
+  display: flex; align-items: center; gap: 0.7rem;
+  background: var(--glass); border: 1px solid var(--line); border-radius: var(--r-lg);
+  padding: clamp(0.7rem, 1.2vw, 1rem) clamp(0.8rem, 1.4vw, 1.2rem);
+  color: inherit; font: inherit; cursor: pointer; text-align: left; width: min(100%, 28rem);
+}
+.tv-temp { font-size: min(6vh, 5vw); font-weight: 650; letter-spacing: -0.03em; }
+.tv-weather-meta { display: flex; flex-direction: column; font-size: min(2.2vh, 1.6vw); color: var(--text-2); }
+.tv-agenda ul, .tv-alerts ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 0.55rem; }
+.tv-agenda li, .tv-alerts li { display: flex; gap: 0.7rem; font-size: min(2.4vh, 1.8vw); align-items: baseline; }
+.tv-agenda time, .tv-empty { color: var(--text-3); }
+.tv-empty { display: flex; align-items: center; gap: 0.4rem; margin: 0; }
+.tv-agent-status { display: flex; flex-wrap: wrap; gap: 0.45rem; }
+.tv-agent-pill {
+  display: flex; align-items: center; gap: 0.4rem;
+  background: var(--glass-strong); border-radius: var(--r-pill);
+  padding: 0.35em 0.7em; font-size: min(2.1vh, 1.5vw);
+}
+.tv-dot { width: 0.5em; height: 0.5em; border-radius: 50%; background: var(--text-4); }
+.tv-dot.on { background: var(--green); }
+.tv-agent-line { display: flex; align-items: center; gap: 0.45rem; color: var(--text-2); margin: 0.8rem 0 0; font-size: min(2.2vh, 1.6vw); }
+.tv-vital-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 0.8em 1.2em; }
+.tv-vital-grid div { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35em; font-size: min(2.1vh, 1.5vw); color: var(--text-2); }
+.tv-vital-grid b { color: var(--text); font-weight: 600; }
+
+@media (max-width: 900px) {
+  .tv-display {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      "clock"
+      "agenda"
+      "agents"
+      "vitals"
+      "alerts";
+    min-height: auto;
+  }
+}

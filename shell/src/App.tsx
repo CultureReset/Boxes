@@ -19,7 +19,7 @@ import { ChatPanel } from "./components/ChatPanel";
 import { store, AGENT, type Outgoing } from "./lib/chat";
 import { Sheet } from "./components/Sheet";
 import { useMenu } from "./components/Menu";
-import { screen as screenModule } from "./modules/registry";
+import { screen as screenModule, SCREENS } from "./modules/registry";
 import { LayoutProvider, useLayout } from "./state/layout";
 import { WorldProvider, useWorld } from "./state/world";
 import { initSpatialNavigation, focusFirst } from "./lib/spatial";
@@ -86,8 +86,10 @@ function Shell() {
     document.querySelector(".main")?.scrollTo({ top: 0 });
   }, [route.screen, route.sub]);
   useEffect(() => {
-    const look = layout?.look ?? "dashboard";
-    document.documentElement.classList.remove("look-dashboard", "look-living", "look-cinema");
+    const forced = new URLSearchParams(location.search).get("look");
+    const allowed = new Set(["clean", "dashboard", "living", "cinema"]);
+    const look = forced && allowed.has(forced) ? forced : (layout?.look ?? "clean");
+    document.documentElement.classList.remove("look-clean", "look-dashboard", "look-living", "look-cinema");
     document.documentElement.classList.add(`look-${look}`);
   }, [layout?.look]);
 
@@ -136,8 +138,22 @@ function Shell() {
       { label: "Log Out", icon: <LogOut size={14} />, danger: true, onClick: () => void api.post("/api/power", { action: "logout" }) },
     ]);
 
+  const sideNav = SCREENS.filter((s) => s.nav || s.id === "settings");
+
   return (
     <div className="frame">
+      <nav className="clean-sidebar" aria-label="Sections">
+        <button type="button" className="wordmark" onClick={() => navigate("home")}>NODE</button>
+        {sideNav.map((s) => {
+          const Icon = s.icon;
+          return (
+            <button key={s.id} type="button" className={`nav${screen === s.id ? " active" : ""}`} onClick={() => navigate(s.id)}>
+              <Icon size={18} strokeWidth={screen === s.id ? 2.4 : 1.8} />
+              {s.title}
+            </button>
+          );
+        })}
+      </nav>
       <TopBar active={screen} onSearch={() => setSearch(true)} onNotifications={() => setNotifs(true)} unread={unread} onUser={userMenu} />
       <DemoBanner />
       {offline && (

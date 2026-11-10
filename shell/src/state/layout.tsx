@@ -23,9 +23,11 @@ export function LayoutProvider({ children }: { children: ReactNode }) {
     mq.addEventListener("change", on);
     return () => mq.removeEventListener("change", on);
   }, []);
-  const tv = !narrow && (layout?.tv ?? detectTv());
+  const params = new URLSearchParams(typeof location !== "undefined" ? location.search : "");
+  const tvQuery = params.has("tv") ? params.get("tv") !== "0" : null;
+  const tv = !narrow && (tvQuery ?? layout?.tv ?? detectTv());
   useEffect(() => {
-    void api.get<Layout>("/api/layout").then(setLayout).catch(() => setLayout({ rows: [], look: "dashboard", tv: null, scale: 1, weatherLocation: "" }));
+    void api.get<Layout>("/api/layout").then(setLayout).catch(() => setLayout({ rows: [], look: "clean", tv: null, scale: 1, weatherLocation: "" }));
   }, []);
   useEvent<Layout>("layout", setLayout);
   useEvent("world", () => void api.get<Layout>("/api/layout").then(setLayout).catch(() => {}));
