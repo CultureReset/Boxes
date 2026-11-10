@@ -107,7 +107,7 @@ async function listeningPorts(served: Map<number, string>): Promise<PortEntry[]>
   return [...byPort.values()].sort((a, b) => a.port - b.port);
 }
 
-const HEALTH_FILE = path.join(os.homedir(), ".local/state/node-health/status.json");
+const HEALTH_FILE = process.env.NODEOS_HEALTH_FILE ?? path.join(process.env.XDG_STATE_HOME ?? path.join(os.homedir(), ".local/state"), "node-health/status.json");
 
 export async function healthReport(): Promise<HealthReport> {
   try {

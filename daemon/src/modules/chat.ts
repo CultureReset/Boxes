@@ -2,7 +2,7 @@ import { mkdir, readFile, writeFile, mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { JsonStore, id } from "../store.js";
-import { HOME } from "../paths.js";
+import { HOME, DATA_DIR } from "../paths.js";
 import { run } from "../exec.js";
 import { HttpError } from "../router.js";
 import { transcribe } from "../voice/stt.js";
@@ -12,12 +12,12 @@ import { transcribe } from "../voice/stt.js";
  *
  * All models (local and cloud) go
  * to LiteLLM (:4000), whose key is read from its env file at call time and
- * never logged or returned. Uploads live on the 2 TB HDD, not the SSD.
+ * never logged or returned. Uploads live under NODE_DATA (override with NODEOS_UPLOAD_DIR).
  */
 
 import { GATEWAY as LITELLM, gatewayKey } from "../gateway.js";
 const LITELLM_ENV = process.env.NODEOS_LITELLM_ENV ?? path.join(HOME, ".config/litellm/litellm.env");
-export const UPLOAD_DIR = process.env.NODEOS_UPLOAD_DIR ?? "/hdd/home/steve/nodeos/uploads";
+export const UPLOAD_DIR = process.env.NODEOS_UPLOAD_DIR ?? path.join(DATA_DIR, "uploads");
 const VISION_MODEL = process.env.NODEOS_VISION_MODEL ?? "v4";
 const VISION = new Set([VISION_MODEL]);
 /** Not chat models: speech, its projector, embeddings. */

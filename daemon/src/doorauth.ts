@@ -3,13 +3,15 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { CONFIG_DIR } from "./paths.js";
+import { doorPublic, doorUrl, nodePublic } from "./config.js";
 
 /** Machine-to-machine: the door's own machine proxy calls this NODE with its app token
  *  (~/.config/nodeos/app-token). Lets a second machine (MacBook, laptop) be plugged into the
  *  same door with `doorctl add-machine` without a local door of its own. */
 function isAppToken(tok: string): boolean {
   try {
-    const want = readFileSync(process.env.NODEOS_APP_TOKEN_FILE ?? path.join(os.homedir(), ".config/nodeos/app-token"), "utf8").trim();
+    const want = readFileSync(process.env.NODEOS_APP_TOKEN_FILE ?? path.join(CONFIG_DIR, "app-token"), "utf8").trim();
     const a = Buffer.from(tok), b = Buffer.from(want);
     return want.length > 0 && a.length === b.length && timingSafeEqual(a, b);
   } catch { return false; }
@@ -17,15 +19,15 @@ function isAppToken(tok: string): boolean {
 
 /**
  * One login for NODE: the node-door session. The door sets `door_session`
- * (HttpOnly, Secure) on steve-ms-7c02...ts.net; cookies are per host, not per
- * port, so every NODE port (14443, frame proxies) receives it as first-party.
+ * (HttpOnly, Secure) on the public NODE host; cookies are per host, not per
+ * port, so every NODE port (serve port, frame proxies) receives it as first-party.
  * Requests that arrive through `tailscale serve` / a remote address must carry
  * a valid door session. The PC's own screen (loopback, no proxy headers) is
  * trusted as before.
  */
-const DOOR = (process.env.NODEOS_DOOR_URL ?? "http://127.0.0.1:7700").replace(/\/$/, "");
-export const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
-export const NODE_PUBLIC = process.env.NODEOS_PUBLIC_ORIGIN ?? "https://steve-ms-7c02.tail1af4f2.ts.net:14443";
+const DOOR = doorUrl();
+export const DOOR_PUBLIC = doorPublic();
+export const NODE_PUBLIC = nodePublic();
 
 const cache = new Map<string, { email: string | null; until: number }>();
 

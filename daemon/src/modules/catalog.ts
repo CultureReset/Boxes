@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOME, OMARCHY_PATH } from "../paths.js";
+import { expandJsonText, resolveConfigFile } from "../config.js";
 
 /**
  * Web-app suggestions, read from real sources rather than a list typed into
@@ -25,7 +26,7 @@ export interface CatalogEntry {
 }
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const CONFIG_FILE = path.resolve(here, "../../../config/webapps.json");
+const CONFIG_FILE = resolveConfigFile("webapps.json", "NODEOS_WEBAPPS_FILE", here);
 
 function slugify(s: string): string {
   return s.toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "");
@@ -72,7 +73,7 @@ async function fromOmarchy(): Promise<CatalogEntry[]> {
 
 async function fromFile(): Promise<CatalogEntry[]> {
   try {
-    const raw = JSON.parse(await readFile(CONFIG_FILE, "utf8")) as Array<Partial<CatalogEntry>>;
+    const raw = JSON.parse(expandJsonText(await readFile(CONFIG_FILE, "utf8"))) as Array<Partial<CatalogEntry>>;
     if (!Array.isArray(raw)) return [];
     return raw
       .filter((e) => e && typeof e.name === "string" && typeof e.url === "string" && /^https?:\/\//.test(e.url))

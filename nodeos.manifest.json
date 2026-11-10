@@ -1,0 +1,17 @@
+{
+  "manifestVersion": 1,
+  "data": "${NODE_DATA}",
+  "envFile": ".env.example",
+  "id": "node-box",
+  "name": "NODE box (daemon + shell)",
+  "version": "0.1.0",
+  "compose": null,
+  "ports": {
+    "http": 7770
+  },
+  "config": [
+    "config/webapps.json",
+    "config/frames.json",
+    "config/services-control.json"
+  ]
+}

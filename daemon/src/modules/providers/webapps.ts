@@ -8,6 +8,8 @@ import { catalogEntries } from "../catalog.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
 import { HttpError } from "../../router.js";
+import { expandJsonText, frameHost, resolveConfigFile } from "../../config.js";
+import { HOME } from "../../paths.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
 
@@ -34,13 +36,24 @@ export interface WebApp {
 }
 
 /** Only what you actually added. The catalog is a separate, read-only menu. */
-const store = new WorldStore<WebApp[]>("webapps", () => []);
+function seedFromConfig(): WebApp[] {
+  try {
+    const list = JSON.parse(expandJsonText(readFileSync(WEBAPPS_FILE, "utf8"))) as WebApp[];
+    if (!Array.isArray(list)) return [];
+    return list
+      .filter((w) => w && typeof w.slug === "string" && typeof w.url === "string")
+      .map((w) => ({ ...w, added: true }));
+  } catch {
+    return [];
+  }
+}
+const store = new WorldStore<WebApp[]>("webapps", seedFromConfig);
 
 /** Per-app "open" from config/webapps.json (saved apps are copies, so read it live). */
 function openModeFromConfig(slug: string): string | undefined {
   try {
     const p = WEBAPPS_FILE;
-    const list = JSON.parse(readFileSync(p, "utf8")) as { slug: string; open?: string }[];
+    const list = JSON.parse(expandJsonText(readFileSync(p, "utf8"))) as { slug: string; open?: string }[];
     return list.find((x) => x.slug === slug)?.open;
   } catch { return undefined; }
 }
@@ -50,7 +63,7 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${HOME}/.local/share/node-icons/${w.slug}.png`) ? `${HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**
@@ -139,16 +152,17 @@ function frameUrlFor(slug: string, _url: string): string | undefined {
   // /frame/<slug>/ is also advertised when NODEOS_FRAME_SAME_ORIGIN=1.
   if (!f || !f.servePort) return undefined;
   if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${slug}/`;
-  const host = process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
-  return `https://${host}:${f.servePort}${f.path}`;
+  const host = frameHost();
+  const scheme = host === "127.0.0.1" || host === "localhost" ? "http" : "https";
+  return `${scheme}://${host}:${f.servePort}${f.path}`;
 }
 
 /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
  *  before it existed pick it up too. OpenClaw lives under Paperclip. */
-const WEBAPPS_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../../../config/webapps.json");
+const WEBAPPS_FILE = resolveConfigFile("webapps.json", "NODEOS_WEBAPPS_FILE", fileURLToPath(import.meta.url));
 function grouping(slug: string): { parent?: string; includes?: string[] } {
   try {
-    const w = (JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as WebApp[]).find((x) => x.slug === slug);
+    const w = (JSON.parse(expandJsonText(readFileSync(WEBAPPS_FILE, "utf8"))) as WebApp[]).find((x) => x.slug === slug);
     return { parent: w?.parent, includes: w?.includes };
   } catch { return {}; }
 }

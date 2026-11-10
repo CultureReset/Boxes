@@ -1232,8 +1232,10 @@ html {
   zoom: var(--ui-scale);
 }
 .tv {
-  --gutter: clamp(32px, 3.4vw, 64px);
-  --tile-gap: 18px;
+  /* Fluid 10-foot layout: sizes track the viewport (phone-width is never .tv;
+     1280x720 through 100-inch 4K all work). Values match the previous 1920x1080 look. */
+  --gutter: clamp(24px, 3.4vw, 64px);
+  --tile-gap: clamp(12px, 1.2vw, 24px);
 }
 @media (hover: none), (pointer: none) {
   .tv body {
@@ -1247,8 +1249,8 @@ html {
   display: none;
 }
 .tv .item {
-  width: 340px;
-  min-height: 104px;
+  width: clamp(16.5rem, 17.7vw, 26rem);
+  min-height: clamp(5.5rem, 9.6vh, 9rem);
 }
 .tv .grid > .item {
   width: 100%;
@@ -1278,10 +1280,31 @@ html {
   padding-block: 10px 14px;
 }
 .tv .askbar {
-  width: min(100%, 1240px);
+  width: min(100%, clamp(40rem, 72vw, 120rem));
 }
 .tv .tabbar {
   display: none;
+}
+.tv .icon-grid {
+  grid-template-columns: repeat(auto-fit, minmax(clamp(4.5rem, 8vw, 8rem), 1fr));
+  gap: clamp(1rem, 2vw, 2rem) clamp(0.75rem, 1.2vw, 1.25rem);
+}
+.tv .big-icon {
+  font-size: clamp(0.85rem, 1.1vw, 1.15rem);
+}
+.tv .big-icon .sq {
+  width: clamp(4.5rem, 5vw, 8rem);
+  height: clamp(4.5rem, 5vw, 8rem);
+  border-radius: clamp(1rem, 1.25vw, 1.75rem);
+}
+.tv .living .clock {
+  font-size: clamp(3rem, 7vw, 9rem);
+}
+.tv .living .greet {
+  font-size: clamp(1.25rem, 2.4vw, 2.5rem);
+}
+.tv .widget.weather .temp {
+  font-size: clamp(2.5rem, 2.8vw, 4.5rem);
 }
 
 /* ======================================================================

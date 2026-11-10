@@ -1,9 +1,11 @@
 import http from "node:http";
 import net from "node:net";
+import os from "node:os";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { requireDoor, isRemote, doorUser, stripDoorCookie } from "./doorauth.js";
 import { fileURLToPath } from "node:url";
+import { expandJsonText, frameAncestors, resolveConfigFile } from "./config.js";
 
 /**
  * Frame proxies: one loopback port per web app, fronted by `tailscale serve`
@@ -17,17 +19,20 @@ export interface Frame { slug: string; upstream: string; localPort: number; serv
   /** Source address for upstream connections (the app whitelists only this address). */
   localAddress?: string }
 
-const FILE = process.env.NODEOS_FRAMES ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "../../config/frames.json");
+const FILE = resolveConfigFile("frames.json", "NODEOS_FRAMES", fileURLToPath(import.meta.url));
 
 export function frames(): Frame[] {
-  try { return JSON.parse(readFileSync(FILE, "utf8")) as Frame[]; } catch { return []; }
+  try {
+    const raw = expandJsonText(readFileSync(FILE, "utf8"));
+    const list = JSON.parse(raw) as Frame[];
+    const offset = Number(process.env.NODEOS_FRAME_PORT_OFFSET ?? 0);
+    if (!offset) return list;
+    return list.map((f) => ({ ...f, localPort: f.localPort + offset, servePort: f.servePort ? f.servePort + offset : 0 }));
+  } catch { return []; }
 }
 
 /** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
-const FRAME_ANCESTORS = (
-  process.env.NODEOS_FRAME_ANCESTORS
-  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
-).trim();
+const FRAME_ANCESTORS = frameAncestors();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
   const out: http.OutgoingHttpHeaders = { ...h };
@@ -53,7 +58,7 @@ function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
  */
 async function liteLLMLogin(up: URL): Promise<string | null> {
   try {
-    const env = readFileSync(process.env.NODEOS_LITELLM_ENV ?? path.join(process.env.HOME ?? "/home/steve", ".config/litellm/litellm.env"), "utf8");
+    const env = readFileSync(process.env.NODEOS_LITELLM_ENV ?? path.join(process.env.HOME ?? os.homedir(), ".config/litellm/litellm.env"), "utf8");
     const get = (k: string) => env.match(new RegExp(`^${k}=["']?([^"'\n]+)`, "m"))?.[1] ?? "";
     const user = get("UI_USERNAME"), pass = get("UI_PASSWORD") || get("LITELLM_MASTER_KEY");
     if (!user || !pass) return null;
@@ -119,6 +124,7 @@ function start(f: Frame): void {
 }
 
 export function startFrameProxies(): void {
+  if (process.env.NODEOS_START_FRAMES === "0") return;
   for (const f of frames()) start(f);
 }
 

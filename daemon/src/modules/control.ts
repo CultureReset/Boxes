@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../exec.js";
 import { HttpError } from "../router.js";
+import { expandJsonText, resolveConfigFile } from "../config.js";
 
 /**
  * Start / stop / restart the services listed in config/services-control.json.
@@ -39,10 +40,10 @@ export interface ControlStatus extends ControlEntry {
 export type ControlAction = "start" | "stop" | "restart";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const FILE = process.env.NODEOS_CONTROL_FILE ?? path.resolve(here, "../../../config/services-control.json");
+const FILE = resolveConfigFile("services-control.json", "NODEOS_CONTROL_FILE", here);
 
 async function entries(): Promise<ControlEntry[]> {
-  const j = JSON.parse(await readFile(FILE, "utf8")) as { services: ControlEntry[] };
+  const j = JSON.parse(expandJsonText(await readFile(FILE, "utf8"))) as { services: ControlEntry[] };
   return j.services.filter((s) => (s.kind === "systemd" || s.kind === "docker") && Array.isArray(s.units) && s.units.length > 0);
 }
 

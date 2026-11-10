@@ -1,9 +1,12 @@
 import os from "node:os";
 import path from "node:path";
 import { mkdirSync } from "node:fs";
+import { HOME as CFG_HOME, NODE_DATA, loadEnvFile } from "./config.js";
 
-export const HOME = os.homedir();
-export const DATA_DIR = process.env.NODEOS_DATA_DIR ?? path.join(process.env.XDG_DATA_HOME ?? path.join(HOME, ".local/share"), "nodeos");
+loadEnvFile();
+
+export const HOME = CFG_HOME;
+export const DATA_DIR = NODE_DATA;
 export const STATE_DIR = path.join(process.env.XDG_STATE_HOME ?? path.join(HOME, ".local/state"), "nodeos");
 export const CONFIG_DIR = path.join(process.env.XDG_CONFIG_HOME ?? path.join(HOME, ".config"), "nodeos");
 export const OMARCHY_PATH = process.env.OMARCHY_PATH ?? "/usr/share/omarchy";

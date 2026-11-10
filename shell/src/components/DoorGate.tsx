@@ -7,17 +7,25 @@ const u64 = (b: ArrayBuffer) => btoa(String.fromCharCode(...new Uint8Array(b))).
 /** Sign in once (node-door). Nothing of NODE renders until the door says yes. */
 export function DoorGate({ children }: { children: ReactNode }) {
   const [me, setMe] = useState<DoorMe | null | undefined>(undefined);
+  const [openAccess, setOpenAccess] = useState(false);
   const [err, setErr] = useState("");
   const [busy, setBusy] = useState(false);
   const check = () => door.me().then(setMe).catch(() => setMe(null));
   useEffect(() => {
-    void check();
+    void fetch("/api/runtime")
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j?.mcpPublic) (window as unknown as { __NODE_RUNTIME__?: { mcpPublic?: string } }).__NODE_RUNTIME__ = j;
+        if (j?.openAccess) { setOpenAccess(true); setMe(null); }
+        else void check();
+      })
+      .catch(() => void check());
     const out = () => setMe(null);
     window.addEventListener("node:signed-out", out);
     return () => window.removeEventListener("node:signed-out", out);
   }, []);
-  if (me === undefined) return <div style={{ minHeight: "100vh", background: "#0b0f14" }} />;
-  if (me) return <>{children}</>;
+  if (me === undefined && !openAccess) return <div style={{ minHeight: "100vh", background: "#0b0f14" }} />;
+  if (me || openAccess) return <>{children}</>;
   const pw = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault(); setErr(""); setBusy(true);
     const f = new FormData(e.currentTarget);

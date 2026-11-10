@@ -1,7 +1,9 @@
+import "./config.js";
 import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
 import { startFrameProxies, handleSameOriginFrame } from "./frameproxy.js";
-import { requireDoor } from "./doorauth.js";
+import { requireDoor, DOOR_PUBLIC } from "./doorauth.js";
+import { doorUrl, NODEOS_PORT, NODE_HOST, runtimeInfo } from "./config.js";
 import http from "node:http";
 import path from "node:path";
 import { askPaperclip } from "./modules/paperclip.js";
@@ -44,8 +46,8 @@ import { CAPABILITIES } from "./platform/capabilities.js";
 import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend, renameChat, logExchange } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
 
-const PORT = Number(process.env.NODEOS_PORT ?? 7770);
-const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
+const PORT = NODEOS_PORT;
+const HOST = NODE_HOST;
 const here = path.dirname(fileURLToPath(import.meta.url));
 const SHELL_DIST = process.env.NODEOS_SHELL_DIST ?? path.resolve(here, "../../shell/dist");
 
@@ -190,6 +192,7 @@ api.post("/api/apps/refresh", async () => {
 });
 api.post("/api/apps/launch", ({ body }) => launchApp(str(obj(body).id, "id", { max: 256 })));
 api.post("/api/apps/remove", ({ body }) => removeApp(str(obj(body).id, "id", { max: 256 })));
+api.get("/api/runtime", () => runtimeInfo());
 api.get("/api/webapps/catalog", () => catalog());
 api.post("/api/webapps/add", ({ body }) => {
   const b = obj(body);
@@ -400,10 +403,9 @@ async function serveStatic(req: http.IncomingMessage, res: http.ServerResponse):
 // valid door session; the daemon checks it with the door's own /me.
 // Local callers (healthcheck, the door's machine proxy) on this computer's own
 // addresses without X-Forwarded-For are trusted as before.
-const DOOR = process.env.NODEOS_DOOR ?? "http://127.0.0.1:7700";
+const DOOR = doorUrl();
 // The door's public HTTPS address. Browsers on a raw tailnet IP over plain http are sent there:
 // the door's session cookie is "Secure; SameSite=None", which Safari drops on http, so sign-in "worked" then bounced.
-const DOOR_PUBLIC = (process.env.NODEOS_DOOR_PUBLIC ?? "https://steve-ms-7c02.tail1af4f2.ts.net:10000").replace(/\/$/, "");
 function plainHttp(req: http.IncomingMessage): boolean {
   const xfp = String(req.headers["x-forwarded-proto"] ?? "");
   return !xfp.includes("https") && !(req.socket as unknown as { encrypted?: boolean }).encrypted;
@@ -435,7 +437,12 @@ function proxyDoor(req: http.IncomingMessage, res: http.ServerResponse): void {
 const server = http.createServer(async (req, res) => {
   // Raw-IP plain-http page loads go to the one public door (same path), where sign-in sticks.
   if (rawIpHost(req) && plainHttp(req) && (req.method === "GET" || req.method === "HEAD") && String(req.headers.accept ?? "").includes("text/html")) {
-    res.writeHead(301, { Location: DOOR_PUBLIC + (req.url ?? "/"), "Cache-Control": "no-store" }); res.end(); return;
+    let pub = "";
+    try { pub = new URL(DOOR_PUBLIC).hostname; } catch {}
+    const isPublic = pub && pub !== "127.0.0.1" && pub !== "localhost";
+    if (isPublic && process.env.NODEOS_REDIRECT_RAW_IP !== "0") {
+      res.writeHead(301, { Location: DOOR_PUBLIC + (req.url ?? "/"), "Cache-Control": "no-store" }); res.end(); return;
+    }
   }
   // App bridge (Twenty, downloaded apps, MCP clients): token-protected, before the shell-only origin check.
   if (req.url?.startsWith("/api/bridge/")) return handleBridge(req, res);

@@ -218,7 +218,10 @@ function LlamaSwap({ n }: { n: number }) {
     <div key={x.id} style={row}><span>{x.id}</span><span style={{ color: running.has(x.id) ? "#30d158" : "#9aa4b2" }}>{running.has(x.id) ? "loaded" : x.status?.value ?? "unloaded"}</span></div>))}</div>}</Loaded></div>;
 }
 
-const MCP_PUBLIC = "https://steve-ms-7c02.tail1af4f2.ts.net:10000/mcp";
+function mcpPublicUrl(): string {
+  return (window as unknown as { __NODE_RUNTIME__?: { mcpPublic?: string } }).__NODE_RUNTIME__?.mcpPublic
+    || `${window.location.origin}/door/mcp`;
+}
 async function mcpTools(): Promise<{ server: string; tools: { name: string; description?: string }[] }> {
   const h = { "content-type": "application/json", accept: "application/json, text/event-stream" };
   const parse = async (r: Response) => { const t = await r.text(); const m = /\{[\s\S]*\}/.exec(t); if (!r.ok || !m) throw new Error(`MCP ${r.status}`); return JSON.parse(m[0]); };
@@ -240,7 +243,7 @@ function Mcp({ n }: { n: number }) {
   const revoke = async (id: string) => { await fetch(`${DOOR_BASE}/mcp-tokens/${id}`, { method: "DELETE", credentials: "include" }); setK((x) => x + 1); };
   return (
     <div style={box}>
-      <div style={row}><span>Endpoint</span><code style={{ color: "#64d2ff", wordBreak: "break-all" }}>{MCP_PUBLIC}</code></div>
+      <div style={row}><span>Endpoint</span><code style={{ color: "#64d2ff", wordBreak: "break-all" }}>{mcpPublicUrl()}</code></div>
       <div style={row}><span>Status</span><span style={{ color: st.e ? "#ff453a" : st.d ? "#30d158" : "#9aa4b2" }}>{st.e ? `Down (${st.e})` : st.d ? `Up · ${st.d.server}` : "Checking…"}</span></div>
       <div style={{ ...row, color: "#9aa4b2", fontSize: 13 }}>Changes made through MCP go to the approval gateway first.</div>
       <h3 style={{ margin: "16px 0 4px" }}>Tools</h3>
@@ -254,7 +257,7 @@ function Mcp({ n }: { n: number }) {
         <div>Token for <b>{fresh.label}</b>. It is shown only this once.</div>
         <code style={{ display: "block", wordBreak: "break-all", margin: "8px 0", color: "#ffd60a" }}>{fresh.token}</code>
         <div style={{ display: "flex", gap: 8 }}><button type="button" style={btn} onClick={() => void navigator.clipboard?.writeText(fresh.token)}>Copy</button><button type="button" style={{ ...btn, background: "#3a3a3c" }} onClick={() => setFresh(null)}>Done</button></div>
-        <div style={{ color: "#9aa4b2", fontSize: 13, marginTop: 6 }}>Use it as <code>Authorization: Bearer …</code> with {MCP_PUBLIC}</div>
+        <div style={{ color: "#9aa4b2", fontSize: 13, marginTop: 6 }}>Use it as <code>Authorization: Bearer …</code> with {mcpPublicUrl()}</div>
       </div>}
       <Loaded s={toks}>{(d) => !d.length ? <Msg>No client tokens yet.</Msg> : <div>{d.map((t) => (
         <div key={t.id} style={row}><span>{t.label} <span style={{ color: "#9aa4b2", fontSize: 13 }}>· {new Date(t.created * 1000).toLocaleDateString()}</span></span>
