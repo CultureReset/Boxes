@@ -1,5 +1,5 @@
 {
-  "_comment": "Services NODE can start/stop. core = starts at boot and the health check alerts when it is down. on-demand = start it from NODE when needed; the health check only reports it. Order matters: start goes top-down, stop goes bottom-up.",
+  "_comment": "Services NODE can start/stop. core = starts at boot and the health check alerts when it is down. on-demand = start it from NODE when needed; the health check only reports it. Order matters: start goes top-down, stop goes bottom-up. Permanent rule: every url must be a Cloudflare Access hostname (https://*.voicecommandapi.com). No Tailscale. New service: 1) hostname + DNS + Access, 2) commit to GitHub, 3) apply live.",
   "services": [
     { "id": "llm", "name": "Local models (llama-swap)", "tier": "core", "kind": "systemd", "units": ["llm.service"], "url": "https://llm.voicecommandapi.com/", "why": "every local model call (:8080)" },
     { "id": "litellm", "name": "LiteLLM gateway", "tier": "core", "kind": "docker", "units": ["litellm-db", "litellm"], "url": "https://api.voicecommandapi.com/", "why": "one endpoint for grok/deepseek/local models (:4000); Hermes agents and OpenJarvis use it" },

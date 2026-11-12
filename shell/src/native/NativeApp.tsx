@@ -218,7 +218,7 @@ function LlamaSwap({ n }: { n: number }) {
     <div key={x.id} style={row}><span>{x.id}</span><span style={{ color: running.has(x.id) ? "#30d158" : "#9aa4b2" }}>{running.has(x.id) ? "loaded" : x.status?.value ?? "unloaded"}</span></div>))}</div>}</Loaded></div>;
 }
 
-const MCP_PUBLIC = "https://steve-ms-7c02.tail1af4f2.ts.net:10000/mcp";
+const MCP_PUBLIC = "https://node.voicecommandapi.com/mcp";
 async function mcpTools(): Promise<{ server: string; tools: { name: string; description?: string }[] }> {
   const h = { "content-type": "application/json", accept: "application/json, text/event-stream" };
   const parse = async (r: Response) => { const t = await r.text(); const m = /\{[\s\S]*\}/.exec(t); if (!r.ok || !m) throw new Error(`MCP ${r.status}`); return JSON.parse(m[0]); };
