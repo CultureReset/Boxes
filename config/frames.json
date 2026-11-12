@@ -118,7 +118,7 @@
   "slug": "supabase",
   "upstream": "http://127.0.0.1:54323",
   "localPort": 17817,
-  "servePort": 0,
+  "servePort": 34443,
   "path": "/"
  },
  {

@@ -26,7 +26,7 @@ export function frames(): Frame[] {
 /** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
 const FRAME_ANCESTORS = (
   process.env.NODEOS_FRAME_ANCESTORS
-  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
+  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443 http://127.0.0.1:7770 http://localhost:7770"
 ).trim();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {

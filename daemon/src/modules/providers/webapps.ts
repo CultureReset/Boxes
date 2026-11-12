@@ -50,7 +50,7 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, ...frameUrls(w.slug), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**
@@ -132,15 +132,19 @@ export const webProvider: AppProvider = {
   },
 };
 
-function frameUrlFor(slug: string, _url: string): string | undefined {
+function frameUrls(slug: string): { frameUrl?: string; localFrameUrl?: string } {
   const f = frames().find((x) => x.slug === slug);
   // Prefer the Tailscale frame-proxy port so NODE can iframe the real app UI
   // without Cloudflare Access (which blanks inside iframes). Same-origin
   // /frame/<slug>/ is also advertised when NODEOS_FRAME_SAME_ORIGIN=1.
-  if (!f || !f.servePort) return undefined;
-  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${slug}/`;
+  // localFrameUrl is for a shell on 127.0.0.1, where door_session is host-only
+  // on loopback and would not be sent to the Tailscale hostname.
+  if (!f) return {};
+  const localFrameUrl = f.localPort ? `http://127.0.0.1:${f.localPort}${f.path}` : undefined;
+  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return { frameUrl: `/frame/${slug}/`, localFrameUrl };
+  if (!f.servePort) return { localFrameUrl };
   const host = process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
-  return `https://${host}:${f.servePort}${f.path}`;
+  return { frameUrl: `https://${host}:${f.servePort}${f.path}`, localFrameUrl };
 }
 
 /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved

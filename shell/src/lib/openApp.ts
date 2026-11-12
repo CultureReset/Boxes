@@ -20,6 +20,15 @@ export async function openWindowView(w: WindowEntry): Promise<void> {
   showAppView({ kind: "window", address: w.address, title: w.title || w.class });
 }
 
+
+/** Pick a frame URL that shares a host with the current shell, so the door cookie is first-party. */
+function resolveWebUrl(a: AppEntry): string | undefined {
+  const host = window.location.hostname;
+  const loop = host === "127.0.0.1" || host === "localhost";
+  if (loop && a.localFrameUrl) return a.localFrameUrl;
+  return a.frameUrl ?? a.url;
+}
+
 export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error" | "info") => void): Promise<void> {
   // Explicit new-tab apps (API-only, blocked framing, etc.)
   if (a.provider === "web" && a.openIn === "tab" && a.url) {
@@ -28,7 +37,10 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
   }
 
   // Prefer the REAL full web app inside NODE (fullscreen iframe).
-  const web = a.frameUrl ?? a.url;
+  // On loopback, use the local frame-proxy port so door_session (host-only on
+  // 127.0.0.1) is sent; the Tailscale :servePort URL is a different host and
+  // was returning "Sign in to NODE first."
+  const web = resolveWebUrl(a);
   if (web && a.provider === "web") {
     return showAppView({ kind: "web", url: web, title: a.name });
   }
