@@ -32,7 +32,6 @@ function WindowStream({ address, title, n }: { address: string; title: string; n
 type Pane = AppViewTarget & { key: string };
 
 function paneKey(t: AppViewTarget): string {
-  if (t.kind === "web") return `web:${t.url}`;
   if (t.kind === "native") return `native:${t.slug}`;
   return `window:${t.address}`;
 }
@@ -51,8 +50,8 @@ function useTvShell(): boolean {
 }
 
 /**
- * Always-visible NODE chrome for a full-app pane.
- * Sits in the layout flow (not over the iframe) so the app cannot cover it,
+ * Always-visible NODE chrome for a native-app pane.
+ * Sits in the layout flow (not over the stream) so the app cannot cover it,
  * and so a 5px "home indicator" can never be the only way back.
  */
 function AppViewChrome({
@@ -146,7 +145,9 @@ function AppViewChrome({
 }
 
 /**
- * One full-app pane. A reserved Home bar is always on screen — TV/kiosk,
+ * One native-app pane (window stream or native widget). Web apps never open
+ * here: they are top-level links to their Cloudflare hostname (see
+ * planLaunch). A reserved Home bar is always on screen — TV/kiosk,
  * Plasma, and phone — so an app can never trap the user with no way back.
  * Phone Back / Escape also closes the pane. Long-press is no longer the
  * only switcher: an Apps button appears when more than one pane is open.
@@ -278,23 +279,6 @@ export function AppView() {
             <div key={p.key} style={{ position: "absolute", inset: 0, display: show ? "block" : "none", background: "#000" }}>
               {p.kind === "native" ? (
                 <NativeApp key={rn} slug={p.slug} n={rn} />
-              ) : p.kind === "web" ? (
-                <iframe
-                  key={rn}
-                  src={p.url}
-                  title={p.title}
-                  // Kiosk only. A sandboxed iframe blocks popups and top-navigation
-                  // (the TV escape that covered the header), but iOS Safari — and
-                  // some other phone browsers — will not run ES module scripts
-                  // inside sandbox, so every modern tile (Rakazo, OpenJarvis, …)
-                  // paints an empty #root on a white page. Phones keep the header
-                  // via AppView's layout; they must not use sandbox.
-                  // No fullscreen in `allow`: requestFullscreen would cover the header.
-                  {...(tv ? { sandbox: "allow-scripts allow-forms allow-same-origin allow-downloads" } : {})}
-                  allow="clipboard-read; clipboard-write; microphone; camera; autoplay; display-capture"
-                  referrerPolicy="no-referrer-when-downgrade"
-                  style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#10161f" }}
-                />
               ) : (
                 <WindowStream key={rn} address={p.address} title={p.title} n={rn} />
               )}

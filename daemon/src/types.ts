@@ -14,10 +14,11 @@ export interface AppEntry {
   desktopFile?: string;
   url?: string;
   /** Same app, through the frame proxy, for NODE's in-app view. */
+  /** Door-gated frame-proxy URL. Not used by the tile launcher (web tiles are top-level links to `url`). */
   frameUrl?: string;
-  /** Loopback door-proxy URL, used only when the shell itself is on 127.0.0.1. */
+  /** Loopback door-proxy URL. Not used by the tile launcher. */
   localFrameUrl?: string;
-  /** "tab": open top-level (apps with logins or that block framing). "native": launch nativeApp on the desktop. "window": maximized desktop Chrome --app at the door-gated frame URL (phone still uses the in-NODE frame). */
+  /** "native": launch nativeApp. Anything else ("tab", "window", unset) is a web tile: the launcher opens `url` (its Cloudflare hostname) as a top-level page, never in an iframe. */
   openIn?: "tab" | "native" | "window";
   /** Linux (or other) app id to launch when openIn is "native", e.g. "linux:appflowy". */
   nativeApp?: string;

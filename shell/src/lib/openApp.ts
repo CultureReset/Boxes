@@ -1,20 +1,27 @@
 import { api } from "../api/client";
 import type { AppEntry, WindowEntry } from "../api/types";
-import { planLaunch, resolveFrameSrc as resolveFrameSrcFor, type LaunchApp } from "./native-open";
+import { planLaunch } from "./native-open";
 
-/** Everything opens the same way: one view, ready to use.
- *  The decision is planLaunch() — native OS window, door-gated frame, or tab.
+export { launchHref } from "./native-open";
+
+/** The decision is planLaunch(): a native OS window, or a top-level link.
+ *  Web apps are never framed — they open as a full page on their own
+ *  Cloudflare hostname, and Back (or the NODE URL) brings the shell back.
  *  On the local Plasma kiosk, native apps raise as one maximized window and
  *  are never also streamed as a JPEG inside NODE. */
 export type AppViewTarget =
-  | { kind: "web"; url: string; title: string }
   | { kind: "window"; address: string; title: string }
   | { kind: "native"; slug: string; title: string };
 
+/** In-NODE pane, only for native window streams. Web apps never land here. */
 export function showAppView(t: AppViewTarget): void {
-  // Keep web targets as real iframes (frame-proxy / same-origin).
-  // Auto-rewriting to native summary widgets blanked OpenJarvis on the phone.
   window.dispatchEvent(new CustomEvent<AppViewTarget>("node:app-view", { detail: t }));
+}
+
+/** Leave NODE and load a web app as a normal full page, same tab. */
+export function openUrl(url: string): void {
+  if (!url || url === "about:blank") return;
+  window.location.assign(url);
 }
 
 export async function openWindowView(w: WindowEntry): Promise<void> {
@@ -37,23 +44,15 @@ async function raiseOnDesktop(w: WindowEntry): Promise<void> {
   await api.post("/api/windows/maximize", { address: w.address }).catch(() => {});
 }
 
-function currentHostname(): string {
-  return typeof window !== "undefined" ? window.location.hostname : "";
-}
-
-/** Frame src for the in-app iframe. Returns undefined when the tile must not be iframed. */
-export function resolveFrameSrc(a: LaunchApp): string | undefined {
-  return resolveFrameSrcFor(a, currentHostname());
-}
-
 export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error" | "info") => void): Promise<void> {
-  const plan = planLaunch(a, { localDesktop: isLocalDesktopShell(), hostname: currentHostname() });
+  const plan = planLaunch(a, { localDesktop: isLocalDesktopShell() });
 
-  // Every web tile opens inside NODE, under the persistent header. "window"
-  // and "tab" used to spawn a raw Chrome window or navigate the kiosk away
-  // — both drop Home, Agents, and every other nav item. Never do that.
-  if ((plan.action === "frame" || plan.action === "window" || plan.action === "tab") && plan.url) {
-    return showAppView({ kind: "web", url: plan.url, title: a.name });
+  // Every web tile is a top-level link to its Cloudflare hostname, on every
+  // display. No iframe. Returning to NODE reloads the shell with its header.
+  if (plan.action === "navigate") {
+    if (plan.url) return openUrl(plan.url);
+    toast?.(`${a.name} has no web address`, "error");
+    return;
   }
 
   // Native: one OS window. Local desktop raises + maximizes and stops.
