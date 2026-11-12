@@ -1,4 +1,8 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Home, Layers, X } from "lucide-react";
+import type { AppViewTarget } from "../lib/openApp";
+import { isLocalDesktopShell } from "../lib/openApp";
+import { NativeApp } from "../native/NativeApp";
 
 /** Live view of a native window, used only on phones/remote (not the local kiosk). */
 function WindowStream({ address, title, n }: { address: string; title: string; n: number }) {
@@ -25,10 +29,6 @@ function WindowStream({ address, title, n }: { address: string; title: string; n
   );
 }
 
-import { X } from "lucide-react";
-import type { AppViewTarget } from "../lib/openApp";
-import { NativeApp } from "../native/NativeApp";
-
 type Pane = AppViewTarget & { key: string };
 
 function paneKey(t: AppViewTarget): string {
@@ -37,16 +37,125 @@ function paneKey(t: AppViewTarget): string {
   return `window:${t.address}`;
 }
 
+function useTvShell(): boolean {
+  const [tv, setTv] = useState(() => (typeof document !== "undefined" ? isLocalDesktopShell() : false));
+  useEffect(() => {
+    const sync = () => setTv(isLocalDesktopShell());
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    window.addEventListener("resize", sync);
+    return () => { obs.disconnect(); window.removeEventListener("resize", sync); };
+  }, []);
+  return tv;
+}
+
 /**
- * One clean, edge-to-edge, app-like pane — like opening an app on an iPad.
- * No browser chrome, no NODE header, no "open in new tab" bar.
- * A home indicator at the bottom returns to the NODE launcher (tap)
- * or shows the app switcher (long-press). Phone Back closes the pane.
+ * Always-visible NODE chrome for a full-app pane.
+ * Sits in the layout flow (not over the iframe) so the app cannot cover it,
+ * and so a 5px "home indicator" can never be the only way back.
+ */
+function AppViewChrome({
+  title,
+  tv,
+  onHome,
+  onSwitcher,
+  canSwitch,
+}: {
+  title: string;
+  tv: boolean;
+  onHome: () => void;
+  onSwitcher: () => void;
+  canSwitch: boolean;
+}) {
+  const barH = tv ? 76 : 52;
+  const btnH = tv ? 52 : 40;
+  const font = tv ? 22 : 16;
+  const icon = tv ? 22 : 16;
+  const btn: CSSProperties = {
+    flex: "0 0 auto",
+    minHeight: btnH,
+    minWidth: tv ? 148 : 92,
+    padding: tv ? "0 24px" : "0 14px",
+    borderRadius: 12,
+    border: 0,
+    fontSize: font,
+    fontWeight: 650,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  };
+  return (
+    <nav
+      aria-label="NODE navigation"
+      style={{
+        flex: "0 0 auto",
+        minHeight: barH,
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        gap: tv ? 16 : 10,
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: `max(${tv ? 20 : 12}px, env(safe-area-inset-left))`,
+        paddingRight: `max(${tv ? 20 : 12}px, env(safe-area-inset-right))`,
+        background: "#10161f",
+        borderBottom: "1px solid #243042",
+        color: "#e8eef7",
+        zIndex: 5,
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Return to NODE"
+        title="Return to NODE"
+        onClick={onHome}
+        style={{ ...btn, background: "#0a84ff", color: "#fff" }}
+      >
+        <Home size={icon} />
+        Home
+      </button>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: tv ? 20 : 15,
+          fontWeight: 600,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {title}
+      </div>
+      {canSwitch && (
+        <button
+          type="button"
+          aria-label="Switch apps"
+          title="Switch apps"
+          onClick={onSwitcher}
+          style={{ ...btn, minWidth: tv ? 128 : 84, background: "#243042", color: "#e8eef7" }}
+        >
+          <Layers size={icon} />
+          Apps
+        </button>
+      )}
+    </nav>
+  );
+}
+
+/**
+ * One full-app pane. A reserved Home bar is always on screen — TV/kiosk,
+ * Plasma, and phone — so an app can never trap the user with no way back.
+ * Phone Back / Escape also closes the pane. Long-press is no longer the
+ * only switcher: an Apps button appears when more than one pane is open.
  */
 export function AppView() {
   const [panes, setPanes] = useState<Pane[]>([]);
   const [active, setActive] = useState<string | null>(null);
   const [switcher, setSwitcher] = useState(false);
+  const tv = useTvShell();
 
   useEffect(() => {
     const on = (e: Event) => {
@@ -98,50 +207,57 @@ export function AppView() {
   if (!cur) return null;
 
   return (
-    <div className="appview" style={{ position: "fixed", inset: 0, zIndex: 900, background: "#000", display: "flex", flexDirection: "column" }}>
-      {switcher && (
-        <div
-          style={{
-            position: "absolute", inset: 0, zIndex: 3, background: "rgba(0,0,0,0.72)",
-            display: "flex", alignItems: "flex-end", justifyContent: "center",
-            padding: "0 16px calc(env(safe-area-inset-bottom) + 36px)", gap: 10,
-            overflowX: "auto", WebkitOverflowScrolling: "touch",
-          }}
-          onClick={() => setSwitcher(false)}
-        >
-          {panes.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={(e) => { e.stopPropagation(); setActive(p.key); setSwitcher(false); }}
-              style={{
-                flex: "0 0 auto", minWidth: 132, maxWidth: 180, height: 88, borderRadius: 18,
-                border: p.key === cur.key ? "2px solid #0a84ff" : "1px solid #2a3545",
-                background: "#151b26", color: "#e8eef7", padding: "12px 14px", textAlign: "left", position: "relative",
-              }}
-            >
-              <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-              <div style={{ fontSize: 11, color: "#9aa7b8", marginTop: 6 }}>App</div>
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Close ${p.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPanes((prev) => {
-                    const next = prev.filter((x) => x.key !== p.key);
-                    if (p.key === cur.key) setActive(next.length ? next[next.length - 1].key : null);
-                    return next;
-                  });
-                }}
-                style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, display: "grid", placeItems: "center", background: "#243042" }}
-              ><X size={12} /></span>
-            </button>
-          ))}
-        </div>
-      )}
+    <div className="appview" style={{ position: "fixed", inset: 0, zIndex: 900, background: "#10161f", display: "flex", flexDirection: "column" }}>
+      <AppViewChrome
+        title={cur.title}
+        tv={tv}
+        onHome={goHome}
+        onSwitcher={() => setSwitcher((s) => !s)}
+        canSwitch={panes.length > 1}
+      />
 
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", minHeight: 0 }}>
+        {switcher && (
+          <div
+            style={{
+              position: "absolute", inset: 0, zIndex: 3, background: "rgba(0,0,0,0.72)",
+              display: "flex", alignItems: "flex-end", justifyContent: "center",
+              padding: "0 16px calc(env(safe-area-inset-bottom) + 36px)", gap: 10,
+              overflowX: "auto", WebkitOverflowScrolling: "touch",
+            }}
+            onClick={() => setSwitcher(false)}
+          >
+            {panes.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setActive(p.key); setSwitcher(false); }}
+                style={{
+                  flex: "0 0 auto", minWidth: 132, maxWidth: 180, height: 88, borderRadius: 18,
+                  border: p.key === cur.key ? "2px solid #0a84ff" : "1px solid #2a3545",
+                  background: "#151b26", color: "#e8eef7", padding: "12px 14px", textAlign: "left", position: "relative",
+                }}
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                <div style={{ fontSize: 11, color: "#9aa7b8", marginTop: 6 }}>App</div>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close ${p.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPanes((prev) => {
+                      const next = prev.filter((x) => x.key !== p.key);
+                      if (p.key === cur.key) setActive(next.length ? next[next.length - 1].key : null);
+                      return next;
+                    });
+                  }}
+                  style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, display: "grid", placeItems: "center", background: "#243042" }}
+                ><X size={12} /></span>
+              </button>
+            ))}
+          </div>
+        )}
         {panes.map((p) => {
           const show = p.key === cur.key;
           const rn = 0;
@@ -164,29 +280,6 @@ export function AppView() {
           );
         })}
       </div>
-
-      <button
-        type="button"
-        aria-label="Return to NODE"
-        title="Return to NODE"
-        onClick={goHome}
-        onContextMenu={(e) => { e.preventDefault(); setSwitcher((s) => !s); }}
-        style={{
-          position: "absolute",
-          bottom: "calc(env(safe-area-inset-bottom) + 8px)",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 134,
-          height: 5,
-          borderRadius: 3,
-          border: 0,
-          padding: 0,
-          background: "rgba(255,255,255,0.5)",
-          boxShadow: "0 0 0 6px transparent",
-          zIndex: 4,
-          cursor: "pointer",
-        }}
-      />
     </div>
   );
 }

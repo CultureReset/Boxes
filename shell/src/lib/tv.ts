@@ -10,7 +10,47 @@ export function detectTv(): boolean {
   return noPointer && window.innerWidth >= 1280;
 }
 
+/**
+ * In TV/kiosk Chrome, window.open and target=_blank create a second OS
+ * window (there is no tab strip). That window sits on top of the kiosk
+ * with no NODE Home control. Keep those navigations inside this window
+ * via the in-app viewer, which always has a Home bar.
+ */
+let popupsGuarded = false;
+function guardTvPopups(): void {
+  if (popupsGuarded) return;
+  popupsGuarded = true;
+  const nativeOpen = window.open.bind(window);
+  window.open = ((url?: string | URL, target?: string, features?: string) => {
+    if (!document.documentElement.classList.contains("tv")) {
+      return nativeOpen(url, target, features);
+    }
+    const href = url == null ? "" : String(url);
+    if (href && href !== "about:blank") {
+      window.dispatchEvent(
+        new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: href } }),
+      );
+    }
+    return window;
+  }) as typeof window.open;
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!document.documentElement.classList.contains("tv")) return;
+      const a = (e.target as Element | null)?.closest?.("a[target='_blank']") as HTMLAnchorElement | null;
+      if (!a?.href) return;
+      e.preventDefault();
+      e.stopPropagation();
+      window.dispatchEvent(
+        new CustomEvent("node:app-view", { detail: { kind: "web", url: a.href, title: a.textContent?.trim() || a.href } }),
+      );
+    },
+    true,
+  );
+}
+
 export function applyTv(on: boolean, scale = 1): void {
   document.documentElement.classList.toggle("tv", on);
-  document.documentElement.style.setProperty("--ui-scale", String(on ? scale : scale));
+  document.documentElement.style.setProperty("--ui-scale", String(scale));
+  if (on) guardTvPopups();
 }
