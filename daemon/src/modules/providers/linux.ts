@@ -1,6 +1,8 @@
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { has, launchDetached, run } from "../../exec.js";
+import { displayEnv, uiDisplay } from "../../xdisplay.js";
+import { ensureClaudeUiProfile, placeDesktopAppWindow } from "../../desktop-window.js";
 import { HOME } from "../../paths.js";
 import { demoApps } from "../../demo.js";
 import { isDemo } from "../status.js";
@@ -122,12 +124,28 @@ export const linuxProvider: AppProvider = {
     const app = (await scan()).find((a) => a.id === qualify("linux", localId));
     if (!app) return { ok: false, message: "App not found" };
     if (await isDemo()) return { ok: true, message: `Would open ${app.name}` };
-    if (app.desktopFile && (await has("uwsm-app"))) {
-      return launchDetached("uwsm-app", ["--", `${localId}.desktop`]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+    const env = displayEnv(await uiDisplay());
+    // Claude Desktop is single-instance and already running on the portrait
+    // xrdp display. A normal launch just raises that 816px window, which NODE
+    // then streams as a mobile layout. Use a separate profile on the
+    // landscape UI display and size the window for a desktop view.
+    if (localId === "com.anthropic.Claude") {
+      const profile = ensureClaudeUiProfile();
+      const ok = launchDetached("claude-desktop", [`--user-data-dir=${profile}`], undefined, env);
+      if (ok) void placeDesktopAppWindow(env.DISPLAY ?? ":0", "com.anthropic.Claude");
+      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
     }
-    if (await has("gtk-launch")) return launchDetached("gtk-launch", [localId]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+    if (app.desktopFile && (await has("uwsm-app"))) {
+      const ok = launchDetached("uwsm-app", ["--", `${localId}.desktop`], undefined, env);
+      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+    }
+    if (await has("gtk-launch")) {
+      const ok = launchDetached("gtk-launch", [localId], undefined, env);
+      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+    }
     const parts = app.exec.replace(/%[a-zA-Z]/g, "").trim().split(/\s+/);
-    return launchDetached(parts[0], parts.slice(1)) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+    const ok = launchDetached(parts[0], parts.slice(1), undefined, env);
+    return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
   },
   async remove(localId) {
     const app = (await scan()).find((a) => a.id === qualify("linux", localId));

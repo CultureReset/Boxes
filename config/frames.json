@@ -134,5 +134,19 @@
   "localPort": 17819,
   "servePort": 41443,
   "path": "/"
+ },
+ {
+  "slug": "minidlna",
+  "upstream": "http://100.104.20.101:8200/",
+  "localPort": 17820,
+  "servePort": 21443,
+  "path": "/"
+ },
+ {
+  "slug": "mcp",
+  "upstream": "https://hub.voicecommandapi.com/",
+  "localPort": 17821,
+  "servePort": 22443,
+  "path": "/"
  }
 ]
