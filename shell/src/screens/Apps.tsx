@@ -1,4 +1,4 @@
-import { openApp } from "../lib/openApp";
+import { launchHref, openApp } from "../lib/openApp";
 import { useEffect, useMemo, useState } from "react";
 import { Search, ChevronDown, Play, Trash2, Globe, Download, Check, LayoutGrid, Smartphone, Monitor, Plus, Usb } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -75,7 +75,7 @@ export function Apps({ onJob, params }: ScreenProps) {
   const isOpen = (a: AppEntry) => windows?.some((w) => w.appId === a.id);
   const statusOf = (a: AppEntry) => (isOpen(a) ? "Open" : a.provider === "web" ? "Web app" : a.provider === "android" ? "On your phone" : a.source === "flatpak" ? "Flatpak" : "Installed");
   const card = (a: AppEntry) => (
-    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.includes?.length ? `${a.comment || statusOf(a)} · with ${a.includes.join(" · ")}` : a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id).map((k) => ({ label: `Open ${k.name}`, onClick: () => launch(k) })), ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
+    <ItemCard key={a.id} icon={a.package === "__screen" ? <span className="app-icon" style={{ ["--ic" as string]: "#3ddc84" }}><Smartphone size={26} /></span> : <AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={a.includes?.length ? `${a.comment || statusOf(a)} · with ${a.includes.join(" · ")}` : a.comment || statusOf(a)} meta={<><Dot state={isOpen(a) ? "on" : a.provider === "web" ? "info" : "off"} /> {statusOf(a)}</>} href={launchHref(a)} onClick={() => launch(a)} onMore={(e) => menu.open(e, [{ label: "Open", icon: <Play size={14} />, onClick: () => launch(a) }, ...(apps ?? []).filter((k) => k.parent && `web:${k.parent}` === a.id).map((k) => ({ label: `Open ${k.name}`, onClick: () => launch(k) })), ...(a.provider === "android" ? [] : [{ divider: true, label: "" }, { label: a.provider === "web" ? "Remove from NODE" : "Uninstall", icon: <Trash2 size={14} />, danger: true, onClick: () => remove(a) }])])} />
   );
 
   const groups = useMemo(() => {
@@ -203,9 +203,9 @@ function AddWebApp({ onClose }: { onClose: () => void }) {
     <Sheet title="Add a web app" icon={<Globe size={18} />} onClose={onClose} size="wide" footer={<button type="button" className="btn primary" onClick={onClose}>Done</button>}>
       <div className="card" style={{ padding: 16, marginBottom: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Any website</div>
-        <p className="dim small" style={{ marginBottom: 12 }}>Runs like an app: no tabs, no address bar, its own window and tile.</p>
+        <p className="dim small" style={{ marginBottom: 12 }}>Must be a Cloudflare Access URL (https://*.voicecommandapi.com). Create the hostname, DNS, and Access first; Tailscale and raw IPs are rejected.</p>
         <div className="form-row">
-          <div className="field" style={{ marginBottom: 0 }}><label>Address</label><input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="pos.toasttab.com" onKeyDown={(e) => e.key === "Enter" && url.trim() && void add({ url, name })} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Address</label><input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://notes.voicecommandapi.com/" onKeyDown={(e) => e.key === "Enter" && url.trim() && void add({ url, name })} /></div>
           <div className="field" style={{ marginBottom: 0 }}><label>Name (optional)</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Toast" /></div>
         </div>
         <button type="button" className="btn primary" style={{ marginTop: 12 }} disabled={!url.trim()} onClick={() => void add({ url, name })}><Plus size={15} /> Add</button>

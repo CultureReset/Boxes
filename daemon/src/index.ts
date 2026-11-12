@@ -1,6 +1,6 @@
 import { handleBridge } from "./appbridge.js";
 import { streamWindow } from "./winstream.js";
-import { startFrameProxies } from "./frameproxy.js";
+import { startFrameProxies, handleSameOriginFrame } from "./frameproxy.js";
 import { requireDoor } from "./doorauth.js";
 import http from "node:http";
 import path from "node:path";
@@ -11,11 +11,14 @@ import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
 import { bus } from "./events.js";
 import { status, uname } from "./modules/status.js";
 import { listApps, launchApp, removeApp, launchWebapp, openPath, refreshAppsCache, providersInfo } from "./modules/apps.js";
+import { launchDesktopFrameWindow } from "./desktop-web-window.js";
 import { catalog, addWebApp, removeWebApp } from "./modules/providers/webapps.js";
 import { androidStatus, watchAndroid } from "./modules/providers/android.js";
 import { getLayout, setLayout, type Layout } from "./modules/layout.js";
 import { readIcon } from "./modules/icons.js";
 import { listWindows, focusWindow, closeWindow, goHome, watchHyprland } from "./modules/windows.js";
+import { maximizeWindow } from "./modules/window-maximize.js";
+import { applyUiDisplay } from "./ui-display.js";
 import { listDir, listSources, recentFiles, searchFiles, newFolder, renamePath, trashPath, readText, readBinary, diskUsage } from "./modules/files.js";
 import { listEvents, upsertEvent, deleteEvent } from "./modules/calendar.js";
 import { searchPackages, listUpdates, updatesStatus, packageJob, installedPackages } from "./modules/packages.js";
@@ -43,6 +46,8 @@ import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
 import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend, renameChat, logExchange } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
+
+applyUiDisplay();
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
@@ -188,7 +193,15 @@ api.post("/api/apps/refresh", async () => {
   await refreshAppsCache();
   return listApps();
 });
-api.post("/api/apps/launch", ({ body }) => launchApp(str(obj(body).id, "id", { max: 256 })));
+api.post("/api/apps/launch", ({ body }) => {
+  const b = obj(body);
+  const id = str(b.id, "id", { max: 256 });
+  if (b.desktopWindow) {
+    const slug = id.startsWith("web:") ? id.slice(4) : id;
+    return launchDesktopFrameWindow(slug);
+  }
+  return launchApp(id);
+});
 api.post("/api/apps/remove", ({ body }) => removeApp(str(obj(body).id, "id", { max: 256 })));
 api.get("/api/webapps/catalog", () => catalog());
 api.post("/api/webapps/add", ({ body }) => {
@@ -223,6 +236,7 @@ api.post("/api/control/:id/:action", ({ params }) => controlAction(params.id, pa
 api.get("/api/windows", () => listWindows());
 api.post("/api/windows/focus", async ({ body }) => ({ ok: await focusWindow(str(obj(body).address, "address")) }));
 api.post("/api/windows/close", async ({ body }) => ({ ok: await closeWindow(str(obj(body).address, "address")) }));
+api.post("/api/windows/maximize", async ({ body }) => ({ ok: await maximizeWindow(str(obj(body).address, "address")) }));
 api.post("/api/home", async () => ({ ok: await goHome() }));
 
 // ---- Files --------------------------------------------------------------
@@ -466,6 +480,7 @@ const server = http.createServer(async (req, res) => {
   // have run for requests that arrived WITH an Origin header — which the shell
   // does not send. Every API call from the shell would have fallen through to
   // serveStatic and come back as HTML.
+  if (req.url?.startsWith("/frame/")) { if (await handleSameOriginFrame(req, res)) return; }
   if (req.url?.startsWith("/api/windows/stream")) return streamWindow(req, res);
   if (req.url?.startsWith("/api/")) {
     if (!(await api.handle(req, res))) sendJson(res, 404, { error: "Not found" });

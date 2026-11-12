@@ -1,0 +1,12 @@
+# Proposed tunnel routes for the two tiles that had no Cloudflare hostname yet.
+# Add these to ~/.cloudflared/config.yml, create DNS CNAMEs, and add both
+# hostnames to the Cloudflare Access app (same "Matt only" policy as the
+# other *.voicecommandapi.com apps) BEFORE restarting cloudflared.
+# Do not enable these routes without Access — they would be public.
+#
+#   - hostname: crawl.voicecommandapi.com
+#     service: http://127.0.0.1:17810
+#   - hostname: minidlna.voicecommandapi.com
+#     service: http://127.0.0.1:17820
+#
+# Frame proxies already listen on those ports (see config/frames.json).

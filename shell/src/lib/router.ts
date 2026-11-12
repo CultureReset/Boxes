@@ -16,6 +16,9 @@ function parse(): Route {
 export function navigate(screen: string, sub?: string, params?: Record<string, string>) {
   const q = params ? "?" + new URLSearchParams(params).toString() : "";
   window.location.hash = `/${screen}${sub ? `/${sub}` : ""}${q}`;
+  // Fire even when the hash did not change (e.g. Home while an app is open)
+  // so the app view closes and the persistent header stays in control.
+  window.dispatchEvent(new CustomEvent("node:navigate", { detail: { screen, sub } }));
 }
 
 export function useRoute(): Route {

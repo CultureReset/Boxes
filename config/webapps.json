@@ -29,15 +29,6 @@
     "open": "frame"
   },
   {
-    "slug": "crm2",
-    "name": "CRM 2",
-    "url": "https://crm2.voicecommandapi.com/",
-    "comment": "Twenty CRM 2",
-    "color": "#5e5ce6",
-    "category": "This Computer",
-    "open": "frame"
-  },
-  {
     "slug": "paperclip",
     "includes": ["OpenClaw", "Hermes"],
     "name": "Paperclip",
@@ -56,7 +47,7 @@
     "color": "#ff375f",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/n8n.png",
-    "open": "frame"
+    "open": "window"
   },
   {
     "slug": "notes",
@@ -65,7 +56,8 @@
     "comment": "AppFlowy",
     "color": "#30d158",
     "category": "This Computer",
-    "open": "frame"
+    "open": "native",
+    "nativeApp": "linux:appflowy"
   },
   {
     "slug": "desktop",
@@ -167,35 +159,38 @@
     "slug": "litellm",
     "name": "LiteLLM",
     "url": "https://api.voicecommandapi.com/ui/",
-    "comment": "LLM proxy admin (new tab — public /ui blocked)",
+    "comment": "LLM proxy API. Admin /ui is blocked on the public hostname by design (403) - tile hidden",
     "color": "#30d158",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/litellm.png",
-    "open": "tab"
+    "open": "tab",
+    "hidden": true
   },
   {
     "slug": "minidlna",
     "name": "MiniDLNA",
-    "url": "http://100.104.20.101:8200/",
-    "comment": "Media server status",
+    "url": "https://minidlna.voicecommandapi.com/",
+    "comment": "MiniDLNA status. minidlna.service is disabled (stock config, never set up) - tile hidden until it runs",
     "color": "#64d2ff",
     "category": "This Computer",
-    "open": "tab"
+    "open": "tab",
+    "hidden": true
   },
   {
     "slug": "mcp",
     "name": "MCP Hub",
     "url": "https://hub.voicecommandapi.com/",
-    "comment": "Bearer API — open in new tab",
+    "comment": "MCP hub is a Bearer-token API with no UI - tile hidden",
     "color": "#8e8e93",
     "category": "This Computer",
-    "open": "tab"
+    "open": "tab",
+    "hidden": true
   },
   {
     "slug": "crawl4ai",
     "name": "Crawl4AI",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/playground",
-    "comment": "Web crawler (Tailscale)",
+    "url": "https://crawl.voicecommandapi.com/playground",
+    "comment": "Web crawler (Cloudflare Access)",
     "color": "#ac8e68",
     "category": "This Computer",
     "open": "tab"

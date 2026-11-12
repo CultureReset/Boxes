@@ -4,3 +4,11 @@ dist/
 .env
 .env.local
 *.log
+
+# Local edit backups (kept out of git)
+_backups/
+
+# Dated backup copies (*.bak, *.bak-YYYYMMDD, *.bak.YYYY...) never go in git
+*.bak
+*.bak-*
+*.bak.*

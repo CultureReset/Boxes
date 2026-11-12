@@ -1,4 +1,4 @@
-import { frames } from "../../frameproxy.js";
+import { ensureFrame, frameUrlForFrame, localFrameUrlForFrame } from "../../frameproxy.js";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -8,8 +8,10 @@ import { catalogEntries } from "../catalog.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
 import { HttpError } from "../../router.js";
+import { isCloudflareAccessUrl, ACCESS_URL_RULE } from "../../cloudflare-access-url.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
+import { effectiveOpenMode } from "../../native-open.js";
 
 /**
  * Web apps: any website run as its own chromeless window. This is how
@@ -20,7 +22,8 @@ import { qualify, type AppProvider } from "./types.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
-  open?: "tab" | "frame";
+  open?: "tab" | "frame" | "native" | "window";
+  nativeApp?: string;
   slug: string;
   parent?: string;
   includes?: string[];
@@ -36,21 +39,54 @@ export interface WebApp {
 /** Only what you actually added. The catalog is a separate, read-only menu. */
 const store = new WorldStore<WebApp[]>("webapps", () => []);
 
-/** Per-app "open" from config/webapps.json (saved apps are copies, so read it live). */
-function openModeFromConfig(slug: string): string | undefined {
+/** Per-app "open" / "url" from config/webapps.json (saved apps are copies, so read it live). */
+function configEntry(slug: string): { open?: string; nativeApp?: string; url?: string; hidden?: boolean } | undefined {
   try {
-    const p = WEBAPPS_FILE;
-    const list = JSON.parse(readFileSync(p, "utf8")) as { slug: string; open?: string }[];
-    return list.find((x) => x.slug === slug)?.open;
+    const list = JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as { slug: string; open?: string; nativeApp?: string; url?: string; hidden?: boolean }[];
+    return list.find((x) => x.slug === slug);
   } catch { return undefined; }
+}
+
+function openModeFromConfig(slug: string): string | undefined {
+  return configEntry(slug)?.open;
 }
 
 function windowClass(slug: string): string {
   return `nodeos-web-${slug}`;
 }
 
+
+function openInFrom(w: WebApp): AppEntry["openIn"] {
+  const open = effectiveOpenMode(openModeFromConfig(w.slug), w.open);
+  if (open === "tab" || open === "native" || open === "window") return open;
+  return undefined;
+}
+
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  // The tile is a top-level link to this URL (its Cloudflare hostname), so a
+  // hostname changed in config/webapps.json wins over a stale saved copy.
+  const url = configEntry(w.slug)?.url || w.url;
+  const icon = w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : "");
+  const base: AppEntry = {
+    id: qualify("web", w.slug),
+    provider: "web",
+    name: w.name,
+    comment: w.comment,
+    exec: url,
+    icon,
+    categories: [w.category],
+    source: "webapp",
+    color: w.color,
+    url,
+    openIn: openInFrom(w),
+    nativeApp: configEntry(w.slug)?.nativeApp ?? w.nativeApp,
+    parent: w.parent ?? grouping(w.slug).parent,
+    includes: w.includes ?? grouping(w.slug).includes,
+  };
+  // Native tiles launch a Linux app; do not allocate or touch a frame proxy.
+  if (base.openIn === "native" && base.nativeApp) return base;
+  const f = ensureFrame(w.slug, { url: w.url });
+  return { ...base, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f) };
 }
 
 /**
@@ -78,12 +114,15 @@ export async function addWebApp(input: { slug?: string; name?: string; url?: str
     } catch {
       throw new HttpError(400, "That doesn't look like a web address");
     }
+    if (!isCloudflareAccessUrl(url)) throw new HttpError(400, ACCESS_URL_RULE);
     const slug = (input.name ?? host).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site";
     app = { slug: all.some((w) => w.slug === slug) ? `${slug}-${Date.now().toString(36)}` : slug, name: input.name?.trim() || host.split(".")[0].replace(/^\w/, (c) => c.toUpperCase()), url, comment: host, color: input.color ?? "#0a84ff", category: "Web", added: true };
     all.push(app);
   }
   app.added = true;
   await store.write(all);
+  // Future app-store / catalog adds inherit a door-gated frame proxy automatically.
+  ensureFrame(app.slug, { url: app.url });
   bus.emit("apps", { provider: "web" });
   return app;
 }
@@ -115,7 +154,9 @@ export const webProvider: AppProvider = {
   name: "Web apps",
   description: "Websites that run in their own window",
   available: async () => ({ ok: true }),
-  list: async () => (await catalog()).filter((w) => w.added).map(toEntry),
+  // `hidden: true` in config/webapps.json keeps a tile out of NODE (dead by design,
+  // API-only, or its service is not running) even if an older saved copy exists.
+  list: async () => (await catalog()).filter((w) => w.added && !configEntry(w.slug)?.hidden).map(toEntry),
   async launch(slug) {
     const app = (await catalog()).find((w) => w.slug === slug);
     if (!app) return { ok: false, message: "Web app not found" };
@@ -131,16 +172,6 @@ export const webProvider: AppProvider = {
     return m?.[1];
   },
 };
-
-function frameUrlFor(slug: string, url: string): string | undefined {
-  const f = frames().find((x) => x.slug === slug);
-  if (!f) return undefined;
-  const u = new URL(url);
-  // Cloudflare Access apps already sit on :443 with Access in front. Rewriting
-  // them onto Tailscale serve ports would break framing from node.voicecommandapi.com.
-  if (u.hostname.endsWith(".voicecommandapi.com") || !f.servePort) return undefined;
-  return `https://${u.hostname}:${f.servePort}${f.path}`;
-}
 
 /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
  *  before it existed pick it up too. OpenClaw lives under Paperclip. */
