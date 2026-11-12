@@ -4,6 +4,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
 import path from "node:path";
 import { requireDoor, isRemote, doorUser, stripDoorCookie } from "./doorauth.js";
+import { cfAccessEmail } from "./cfaccess.js";
 import { fileURLToPath } from "node:url";
 import { assignMissingServePorts, ensureFrameForApp, frameUrlForFrame, localFrameUrlForFrame } from "./frameassign.js";
 
@@ -40,9 +41,14 @@ function persistFrames(list: Frame[]): void {
 const startedPorts = new Set<number>();
 const servedPorts = new Set<number>();
 
-/** Best-effort tailnet-only `tailscale serve`. Missing binary or a failed apply must not take the daemon down. */
+/**
+ * Best-effort tailnet-only `tailscale serve` for a frame proxy.
+ * RETIRED by default (2026-11-12): tiles are top-level Cloudflare Access links,
+ * and the frame-proxy Tailscale ports were an auth side door. Only runs when
+ * NODEOS_FRAME_TAILSCALE=1. Missing binary or a failed apply must not take the daemon down.
+ */
 function applyServe(f: Frame): void {
-  if (process.env.NODEOS_SKIP_SERVE === "1") return;
+  if (process.env.NODEOS_FRAME_TAILSCALE !== "1" || process.env.NODEOS_SKIP_SERVE === "1") return;
   if (!f.servePort || !f.localPort || servedPorts.has(f.servePort)) return;
   servedPorts.add(f.servePort);
   const child = spawn("tailscale", ["serve", "--bg", `--https=${f.servePort}`, `http://127.0.0.1:${f.localPort}`], { stdio: "ignore", detached: true });
@@ -156,8 +162,7 @@ function start(f: Frame): void {
     req.pipe(p);
   });
   srv.on("upgrade", async (req, sock, head) => {
-    const cfEmail = req.headers["cf-access-authenticated-user-email"];
-    const cfOk = typeof cfEmail === "string" && cfEmail.includes("@");
+    const cfOk = Boolean(await cfAccessEmail(req)); // signed JWT only; strips spoofed cf-access-* headers
     if (isRemote(req) && !cfOk && !(await doorUser(req))) { sock.end("HTTP/1.1 401 Unauthorized\r\nContent-Length: 0\r\n\r\n"); return; }
     const u = net.connect({ port, host: up.hostname, localAddress: f.localAddress }, () => {
       const lines = [`${req.method} ${req.url} HTTP/1.1`];
