@@ -87,13 +87,6 @@
   "path": "/"
  },
  {
-  "slug": "crm2",
-  "upstream": "http://127.0.0.1:3020",
-  "localPort": 17813,
-  "servePort": 36443,
-  "path": "/"
- },
- {
   "slug": "pos",
   "upstream": "http://127.0.0.1:8069",
   "localPort": 17814,
