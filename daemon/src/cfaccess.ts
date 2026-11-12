@@ -16,7 +16,13 @@ import { createPublicKey, createVerify, type KeyObject } from "node:crypto";
  * redirect), so defaults live here; override with env if the Access app changes.
  */
 export const CF_TEAM = (process.env.NODEOS_CF_ACCESS_TEAM ?? "autumn-bread-a4ec.cloudflareaccess.com").replace(/^https?:\/\//, "").replace(/\/$/, "");
-export const CF_AUDS = (process.env.NODEOS_CF_ACCESS_AUD ?? "a40e8536b602868b5bd9b243bdd659e703bf32223104dd320f68467f2657e221")
+// Every Access application whose hostname routes to a NODE frame proxy:
+//   "NODE apps" (all *.voicecommandapi.com tiles) and "n8n editor" (automations).
+// A new Access app in front of a frame proxy must be added here (or via env).
+export const CF_AUDS = (process.env.NODEOS_CF_ACCESS_AUD ?? [
+  "a40e8536b602868b5bd9b243bdd659e703bf32223104dd320f68467f2657e221", // NODE apps
+  "fdb3a332988c2c12a2abbfbab5b3b49f1a4c4be66a48ed9e63d765c9f96c42ea", // n8n editor
+].join(","))
   .split(",").map((s) => s.trim()).filter(Boolean);
 
 type Jwk = { kid: string; kty: string; n: string; e: string; alg?: string };
