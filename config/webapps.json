@@ -177,8 +177,8 @@
   {
     "slug": "minidlna",
     "name": "MiniDLNA",
-    "url": "http://100.104.20.101:8200/",
-    "comment": "Media server status",
+    "url": "https://minidlna.voicecommandapi.com/",
+    "comment": "MiniDLNA status (Cloudflare Access)",
     "color": "#64d2ff",
     "category": "This Computer",
     "open": "tab"
@@ -195,8 +195,8 @@
   {
     "slug": "crawl4ai",
     "name": "Crawl4AI",
-    "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/playground",
-    "comment": "Web crawler (Tailscale)",
+    "url": "https://crawl.voicecommandapi.com/playground",
+    "comment": "Web crawler (Cloudflare Access)",
     "color": "#ac8e68",
     "category": "This Computer",
     "open": "tab"

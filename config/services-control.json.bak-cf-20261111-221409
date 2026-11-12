@@ -1,0 +1,23 @@
+{
+  "_comment": "Services NODE can start/stop. core = starts at boot and the health check alerts when it is down. on-demand = start it from NODE when needed; the health check only reports it. Order matters: start goes top-down, stop goes bottom-up.",
+  "services": [
+    { "id": "llm", "name": "Local models (llama-swap)", "tier": "core", "kind": "systemd", "units": ["llm.service"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:13443/", "why": "every local model call (:8080)" },
+    { "id": "litellm", "name": "LiteLLM gateway", "tier": "core", "kind": "docker", "units": ["litellm-db", "litellm"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:23443/ui/", "why": "one endpoint for grok/deepseek/local models (:4000); Hermes agents and OpenJarvis use it" },
+    { "id": "openclaw", "name": "OpenClaw gateway", "tier": "core", "kind": "systemd", "units": ["openclaw-gateway.service"], "parent": "paperclip", "url": "https://steve-ms-7c02.tail1af4f2.ts.net:31443/", "why": "the Paperclip Ops agent runs through it" },
+    { "id": "gbrain", "name": "GBrain memory", "tier": "core", "kind": "systemd", "units": ["gbrain.service", "gbrain-audit-gw.service"], "url": null, "why": "shared agent memory MCP (:3130/:3131)" },
+    { "id": "paperclip", "name": "Paperclip (Jarvis HQ)", "tier": "core", "kind": "systemd", "units": ["paperclipai.service"], "includes": [{ "name": "Hermes", "why": "agent runtime (hermes_local) for Lead, Coder, Researcher, Scraper, QA Verifier, Security Auditor" }], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:30443/", "why": "the agent company: Ops, Coder, Scraper, Researcher, QA, Security" },
+    { "id": "openjarvis", "name": "OpenJarvis", "tier": "core", "kind": "systemd", "units": ["openjarvis.service", "openjarvis-ui.service"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:20443/", "why": "the Jarvis front door (:8000 API, :5173 UI)" },
+    { "id": "node-chat", "name": "node-chat", "tier": "core", "kind": "systemd", "units": ["node-chat.service"], "url": null, "why": "voice agent, flows, OpenAI-compatible API (:7780)" },
+    { "id": "sms", "name": "SMS door (relay + node-sms)", "tier": "core", "kind": "systemd", "units": ["smsgw-relay.service", "node-sms.service"], "url": null, "why": "approval by text: Funnel :8443 -> relay :8787, node-sms :7772" },
+    { "id": "searxng", "name": "SearXNG search", "tier": "on-demand", "kind": "docker", "units": ["searxng"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:29443/", "why": "web search for Researcher/Scraper agents; keep on while agents run" },
+    { "id": "crawl4ai", "name": "Crawl4AI", "tier": "on-demand", "kind": "docker", "units": ["crawl4ai"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:12443/", "why": "page crawling for Researcher/Scraper agents; ~2 GB RAM" },
+    { "id": "twenty", "name": "Twenty CRM", "tier": "on-demand", "kind": "docker", "units": ["twenty-db-1", "twenty-redis-1", "twenty-server-1", "twenty-worker-1"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:26443/", "why": "CRM" },
+    { "id": "n8n", "name": "n8n", "tier": "on-demand", "kind": "docker", "units": ["n8n"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:25443/", "why": "workflow automation" },
+    { "id": "open-webui", "name": "Open WebUI", "tier": "on-demand", "kind": "docker", "units": ["open-webui"], "url": null, "why": "chat UI on llama-swap (:3001, not on Tailscale serve)" },
+    { "id": "uptime-kuma", "name": "Uptime Kuma", "tier": "on-demand", "kind": "docker", "units": ["uptime-kuma"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:7443/", "why": "uptime dashboards" },
+    { "id": "navidrome", "name": "Navidrome music", "tier": "on-demand", "kind": "systemd", "units": ["navidrome.service"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:4443/", "why": "music server" },
+    { "id": "scraper-receivers", "name": "Scraper receivers", "tier": "on-demand", "kind": "systemd", "units": ["gmaps-recv.service", "beachball-receiver.service", "brettrobinson-receiver.service", "youngssuncoast-receiver.service", "southbaldwin-receiver.service", "gulfshores-recv.service"], "url": null, "why": "local receivers (:8765, :8777-8781) that scraping jobs post into" },
+    { "id": "gulfshores-scraper", "name": "Gulf Shores scraper", "tier": "on-demand", "kind": "systemd", "units": ["gulfshores-scraper.service"], "url": null, "why": "long-running rentals scraper" },
+    { "id": "node-box", "name": "NODE (this app)", "tier": "core", "kind": "systemd", "units": ["node-box.service"], "url": "https://steve-ms-7c02.tail1af4f2.ts.net:14443/", "why": "this dashboard; restart only", "self": true }
+  ]
+}
