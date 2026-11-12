@@ -29,15 +29,6 @@
     "open": "frame"
   },
   {
-    "slug": "crm2",
-    "name": "CRM 2",
-    "url": "https://crm2.voicecommandapi.com/",
-    "comment": "Twenty CRM 2",
-    "color": "#5e5ce6",
-    "category": "This Computer",
-    "open": "frame"
-  },
-  {
     "slug": "paperclip",
     "includes": ["OpenClaw", "Hermes"],
     "name": "Paperclip",

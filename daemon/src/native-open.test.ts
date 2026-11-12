@@ -22,7 +22,6 @@ const CF_TILES: [string, string, string?][] = [
   ["web:openjarvis", "https://jarvis.voicecommandapi.com/"],
   ["web:rakazo", "https://rakazo.voicecommandapi.com/"],
   ["web:twenty-crm", "https://crm.voicecommandapi.com/"],
-  ["web:crm2", "https://crm2.voicecommandapi.com/"],
   ["web:paperclip", "https://paperclip.voicecommandapi.com/"],
   ["web:n8n", "https://automations.voicecommandapi.com/", "window"],
   ["web:desktop", "https://desktop.voicecommandapi.com/"],
