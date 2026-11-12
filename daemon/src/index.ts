@@ -17,6 +17,7 @@ import { getLayout, setLayout, type Layout } from "./modules/layout.js";
 import { readIcon } from "./modules/icons.js";
 import { listWindows, focusWindow, closeWindow, goHome, watchHyprland } from "./modules/windows.js";
 import { maximizeWindow } from "./modules/window-maximize.js";
+import { applyUiDisplay } from "./ui-display.js";
 import { listDir, recentFiles, searchFiles, newFolder, renamePath, trashPath, readText, readBinary, diskUsage } from "./modules/files.js";
 import { listEvents, upsertEvent, deleteEvent } from "./modules/calendar.js";
 import { searchPackages, listUpdates, updatesStatus, packageJob, installedPackages } from "./modules/packages.js";
@@ -44,6 +45,8 @@ import { answer } from "./platform/answer.js";
 import { CAPABILITIES } from "./platform/capabilities.js";
 import { models as chatModels, upload as chatUpload, uploadFile, transcribeAny, listChats, getChat, deleteChat, setChatModel, send as chatSend, renameChat, logExchange } from "./modules/chat.js";
 import { handle, handleAudio, reply, replyAloud, history, voiceStatus, type Channel } from "./voice/pipeline.js";
+
+applyUiDisplay();
 
 const PORT = Number(process.env.NODEOS_PORT ?? 7770);
 const HOST = process.env.NODEOS_HOST ?? "127.0.0.1";
