@@ -40,9 +40,9 @@ export interface WebApp {
 const store = new WorldStore<WebApp[]>("webapps", () => []);
 
 /** Per-app "open" / "url" from config/webapps.json (saved apps are copies, so read it live). */
-function configEntry(slug: string): { open?: string; nativeApp?: string; url?: string } | undefined {
+function configEntry(slug: string): { open?: string; nativeApp?: string; url?: string; hidden?: boolean } | undefined {
   try {
-    const list = JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as { slug: string; open?: string; nativeApp?: string; url?: string }[];
+    const list = JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as { slug: string; open?: string; nativeApp?: string; url?: string; hidden?: boolean }[];
     return list.find((x) => x.slug === slug);
   } catch { return undefined; }
 }
@@ -154,7 +154,9 @@ export const webProvider: AppProvider = {
   name: "Web apps",
   description: "Websites that run in their own window",
   available: async () => ({ ok: true }),
-  list: async () => (await catalog()).filter((w) => w.added).map(toEntry),
+  // `hidden: true` in config/webapps.json keeps a tile out of NODE (dead by design,
+  // API-only, or its service is not running) even if an older saved copy exists.
+  list: async () => (await catalog()).filter((w) => w.added && !configEntry(w.slug)?.hidden).map(toEntry),
   async launch(slug) {
     const app = (await catalog()).find((w) => w.slug === slug);
     if (!app) return { ok: false, message: "Web app not found" };

@@ -130,7 +130,7 @@
  },
  {
   "slug": "minidlna",
-  "upstream": "http://100.104.20.101:8200/",
+  "upstream": "http://127.0.0.1:8200/",
   "localPort": 17820,
   "servePort": 21443,
   "path": "/"
@@ -140,6 +140,13 @@
   "upstream": "https://hub.voicecommandapi.com/",
   "localPort": 17821,
   "servePort": 22443,
+  "path": "/"
+ },
+ {
+  "slug": "crm2",
+  "upstream": "https://crm2.voicecommandapi.com/",
+  "localPort": 17813,
+  "servePort": 36443,
   "path": "/"
  }
 ]
