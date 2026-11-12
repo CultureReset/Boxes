@@ -1283,6 +1283,20 @@ html {
 .tv .tabbar {
   display: none;
 }
+/* zoom: var(--ui-scale) shrinks the CSS viewport. At a high scale a 1920px
+   TV can fall under the 840px phone breakpoint, which hides .tabs — and
+   this rule already hides the phone TabBar, so every nav item vanishes.
+   TV always keeps the TopBar tabs (Home, Agents, and the rest). */
+.tv .tabs,
+.tv .status-strip {
+  display: flex;
+}
+.tv .user-chip .name {
+  display: inline;
+}
+.main {
+  position: relative;
+}
 
 /* ======================================================================
    LOOKS. The dashboard look is the default token set. "living" is the

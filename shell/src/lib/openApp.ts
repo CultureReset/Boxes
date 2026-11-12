@@ -49,21 +49,11 @@ export function resolveFrameSrc(a: LaunchApp): string | undefined {
 export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error" | "info") => void): Promise<void> {
   const plan = planLaunch(a, { localDesktop: isLocalDesktopShell(), hostname: currentHostname() });
 
-  // Desktop kiosk + openIn "window": maximized native Chrome, not an in-NODE iframe.
-  if (plan.action === "window") {
-    const r = await api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: a.id, desktopWindow: true }).catch((e: Error) => ({ ok: false, message: e.message }));
-    if (!r.ok) { toast?.(r.message, "error"); return; }
-    toast?.(`Opening ${a.name}…`, "info");
-    return;
-  }
-
-  if (plan.action === "frame" && plan.url) {
+  // Every web tile opens inside NODE, under the persistent header. "window"
+  // and "tab" used to spawn a raw Chrome window or navigate the kiosk away
+  // — both drop Home, Agents, and every other nav item. Never do that.
+  if ((plan.action === "frame" || plan.action === "window" || plan.action === "tab") && plan.url) {
     return showAppView({ kind: "web", url: plan.url, title: a.name });
-  }
-
-  if (plan.action === "tab" && plan.url) {
-    if (!window.open(plan.url, "_blank", "noopener")) window.location.href = plan.url;
-    return;
   }
 
   // Native: one OS window. Local desktop raises + maximizes and stops.

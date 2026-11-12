@@ -145,17 +145,17 @@ function Shell() {
           Desktop offline — can't reach NODE on your desktop over Tailscale. Showing the saved app; nothing will run until it's back.
         </div>
       )}
-      <main className={`main${showAsk ? "" : " no-ask"}`} key={`${screen}:${world?.id ?? ""}`}>
+      <main className={`main${showAsk ? "" : " no-ask"}`} key={`${screen}:${world?.id ?? ""}`} style={{ position: "relative" }}>
         <div className="fade-in">
           <Screen sub={route.sub} params={route.params} onJob={setJob} />
         </div>
+        <AppView />
       </main>
       {(showAsk || chatOpen) && <AskBar placeholder={mod.ask ?? "Message…"} personas={agents?.personas} persona={persona} onPersona={setPersona} onJob={setJob} online={online} model={model} onModel={pickModel} onChat={onChat} />}
       {(showAsk || chatOpen) && chatOpen && <ChatPanel chatId={chatId} outgoing={outgoing} onChatId={setChatId} onModel={setModel} onClose={() => setChatOpen(false)} onJob={setJob} />}
       <TabBar active={screen} />
       {search && <SearchOverlay onClose={() => setSearch(false)} />}
       {notifs && <NotificationsPanel onClose={() => setNotifs(false)} />}
-      <AppView />
       {job && <JobPanel jobId={job} onClose={() => setJob(null)} />}
       {power && (
         <Sheet title="Power" icon={<Power size={18} />} onClose={() => setPower(false)} size="narrow">

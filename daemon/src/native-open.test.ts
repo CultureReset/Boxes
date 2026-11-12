@@ -68,17 +68,17 @@ describe("planLaunch — one rule for every tile", () => {
     }
   });
 
-  it("openIn window: maximized desktop Chrome on the kiosk, fullscreen frame on the phone", () => {
+  it("openIn window: still an in-NODE frame on the kiosk and the phone, so the header stays", () => {
     const app = web({ id: "web:n8n", openIn: "window" });
     const local = planLaunch(app, desktop);
     const remote = planLaunch(app, phone);
-    assert.equal(local.action, "window");
+    assert.equal(local.action, "frame");
     assert.equal(local.url, app.frameUrl);
     assert.notEqual(local.url, app.url);
     assert.equal(local.stream, false);
     assert.equal(remote.action, "frame");
     assert.equal(remote.url, app.frameUrl);
-    assert.equal(planLaunch(app, loop).action, "window");
+    assert.equal(planLaunch(app, loop).action, "frame");
     assert.equal(planLaunch(app, loop).url, app.localFrameUrl);
   });
 
@@ -101,9 +101,10 @@ describe("planLaunch — one rule for every tile", () => {
     assert.notEqual(plan.url, litellm.url);
   });
 
-  it("a web tile with no proxy falls back to a tab", () => {
+  it("a web tile with no proxy still opens as an in-NODE frame, not a top-level tab", () => {
     const app = { id: "web:loose", provider: "web", url: "https://example.com" };
-    assert.deepEqual(planLaunch(app, desktop), { action: "tab", url: "https://example.com", stream: false });
+    assert.deepEqual(planLaunch(app, desktop), { action: "frame", url: "https://example.com", stream: false });
+    assert.deepEqual(planLaunch(app, phone), { action: "frame", url: "https://example.com", stream: false });
   });
 });
 

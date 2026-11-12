@@ -170,6 +170,19 @@ export function AppView() {
   }, []);
 
   useEffect(() => {
+    // TopBar / TabBar navigation must close the app pane so Home, Agents,
+    // and every other screen are reachable. Do not history.back() here —
+    // that would undo the navigation the user just picked.
+    const close = () => {
+      setPanes([]);
+      setActive(null);
+      setSwitcher(false);
+    };
+    window.addEventListener("node:navigate", close);
+    return () => window.removeEventListener("node:navigate", close);
+  }, []);
+
+  useEffect(() => {
     if (!active) return;
     history.pushState({ appView: true }, "");
     const pop = () => {
@@ -207,7 +220,7 @@ export function AppView() {
   if (!cur) return null;
 
   return (
-    <div className="appview" style={{ position: "fixed", inset: 0, zIndex: 900, background: "#10161f", display: "flex", flexDirection: "column" }}>
+    <div className="appview" style={{ position: "absolute", inset: 0, zIndex: 4, background: "#10161f", display: "flex", flexDirection: "column" }}>
       <AppViewChrome
         title={cur.title}
         tv={tv}
@@ -270,7 +283,12 @@ export function AppView() {
                   key={rn}
                   src={p.url}
                   title={p.title}
-                  allow="clipboard-read; clipboard-write; microphone; camera; fullscreen; autoplay; display-capture"
+                  // No allow-popups, allow-top-navigation, or allow-top-navigation-by-user-activation:
+                  // a cross-origin app cannot open a second OS window or replace the NODE shell.
+                  // No fullscreen in `allow`: requestFullscreen would cover the header.
+                  sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
+                  allow="clipboard-read; clipboard-write; microphone; camera; autoplay; display-capture"
+                  referrerPolicy="no-referrer-when-downgrade"
                   style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#fff" }}
                 />
               ) : (

@@ -11,46 +11,89 @@ export function detectTv(): boolean {
 }
 
 /**
- * In TV/kiosk Chrome, window.open and target=_blank create a second OS
- * window (there is no tab strip). That window sits on top of the kiosk
- * with no NODE Home control. Keep those navigations inside this window
- * via the in-app viewer, which always has a Home bar.
+ * Keep every navigation inside the NODE shell, on every display — TV, Plasma,
+ * and phone. A new OS window, a target=_blank / _top / _parent link, or a
+ * top-level jump to an app origin (Paperclip, Twenty, n8n, …) leaves the
+ * shell and drops the header. Intercept those and open the URL in the
+ * in-NODE app view, which sits below the persistent TopBar.
+ *
+ * This runs for the shell's own document only. Cross-origin iframes are
+ * stopped separately (sandbox without allow-popups / allow-top-navigation).
  */
-let popupsGuarded = false;
-function guardTvPopups(): void {
-  if (popupsGuarded) return;
-  popupsGuarded = true;
-  const nativeOpen = window.open.bind(window);
-  window.open = ((url?: string | URL, target?: string, features?: string) => {
-    if (!document.documentElement.classList.contains("tv")) {
-      return nativeOpen(url, target, features);
+let shellGuarded = false;
+export function guardShellEscape(): void {
+  if (shellGuarded) return;
+  shellGuarded = true;
+
+  const openInShell = (url: string, title?: string) => {
+    const href = String(url);
+    if (!href || href === "about:blank") return;
+    window.dispatchEvent(
+      new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: title || href } }),
+    );
+  };
+
+  const leavesShell = (href: string): boolean => {
+    try {
+      return new URL(href, location.href).origin !== location.origin;
+    } catch {
+      return false;
     }
+  };
+
+  window.open = ((url?: string | URL, _target?: string, _features?: string) => {
     const href = url == null ? "" : String(url);
-    if (href && href !== "about:blank") {
-      window.dispatchEvent(
-        new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: href } }),
-      );
-    }
+    openInShell(href);
     return window;
   }) as typeof window.open;
+
   document.addEventListener(
     "click",
     (e) => {
-      if (!document.documentElement.classList.contains("tv")) return;
-      const a = (e.target as Element | null)?.closest?.("a[target='_blank']") as HTMLAnchorElement | null;
+      const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!a?.href) return;
+      const target = (a.getAttribute("target") || "").toLowerCase();
+      const escapes = target === "_blank" || target === "_top" || target === "_parent";
+      if (!escapes && !leavesShell(a.href)) return;
       e.preventDefault();
       e.stopPropagation();
-      window.dispatchEvent(
-        new CustomEvent("node:app-view", { detail: { kind: "web", url: a.href, title: a.textContent?.trim() || a.href } }),
-      );
+      openInShell(a.href, a.textContent?.trim() || undefined);
     },
     true,
   );
+
+  const nav = (window as Window & { navigation?: EventTarget & { addEventListener: typeof window.addEventListener } }).navigation;
+  nav?.addEventListener("navigate", (event: Event) => {
+    const e = event as Event & {
+      destination?: { url?: string };
+      canIntercept?: boolean;
+      cancelable?: boolean;
+      preventDefault: () => void;
+      intercept?: (opts: { handler: () => Promise<void> }) => void;
+    };
+    const raw = e.destination?.url;
+    if (!raw || !leavesShell(raw)) return;
+    if (e.cancelable) e.preventDefault();
+    const go = () => { openInShell(raw, new URL(raw, location.href).host); };
+    if (e.canIntercept && e.intercept) {
+      e.intercept({ handler: async () => { go(); } });
+    } else {
+      go();
+    }
+  });
+
+  document.addEventListener("fullscreenchange", () => {
+    // An iframe with allow=fullscreen (or a same-document request) can cover
+    // the NODE header. Exit it; the app stays in its pane.
+    const el = document.fullscreenElement;
+    if (el && el !== document.documentElement) {
+      void document.exitFullscreen?.();
+    }
+  });
 }
 
 export function applyTv(on: boolean, scale = 1): void {
   document.documentElement.classList.toggle("tv", on);
   document.documentElement.style.setProperty("--ui-scale", String(scale));
-  if (on) guardTvPopups();
+  guardShellEscape();
 }

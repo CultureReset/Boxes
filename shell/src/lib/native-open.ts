@@ -45,14 +45,13 @@ export function planLaunch(a: LaunchApp, ctx: LaunchContext): LaunchPlan {
     return { action: "native", nativeId, stream: !ctx.localDesktop };
   }
   const frame = resolveFrameSrc(a, ctx.hostname);
-  if (frame && ctx.localDesktop && a.openIn === "window") {
-    return { action: "window", url: frame, stream: false };
-  }
+  // "window" and "tab" must not leave the NODE shell — the persistent header
+  // (Home, Agents, and every nav item) has to stay on screen for every app.
   if (frame) {
     return { action: "frame", url: frame, stream: false };
   }
   if (a.url) {
-    return { action: "tab", url: a.url, stream: false };
+    return { action: "frame", url: a.url, stream: false };
   }
-  return { action: "tab", stream: false };
+  return { action: "frame", stream: false };
 }
