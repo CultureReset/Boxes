@@ -283,13 +283,17 @@ export function AppView() {
                   key={rn}
                   src={p.url}
                   title={p.title}
-                  // No allow-popups, allow-top-navigation, or allow-top-navigation-by-user-activation:
-                  // a cross-origin app cannot open a second OS window or replace the NODE shell.
+                  // Kiosk only. A sandboxed iframe blocks popups and top-navigation
+                  // (the TV escape that covered the header), but iOS Safari — and
+                  // some other phone browsers — will not run ES module scripts
+                  // inside sandbox, so every modern tile (Rakazo, OpenJarvis, …)
+                  // paints an empty #root on a white page. Phones keep the header
+                  // via AppView's layout; they must not use sandbox.
                   // No fullscreen in `allow`: requestFullscreen would cover the header.
-                  sandbox="allow-scripts allow-forms allow-same-origin allow-downloads"
+                  {...(tv ? { sandbox: "allow-scripts allow-forms allow-same-origin allow-downloads" } : {})}
                   allow="clipboard-read; clipboard-write; microphone; camera; autoplay; display-capture"
                   referrerPolicy="no-referrer-when-downgrade"
-                  style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#fff" }}
+                  style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#10161f" }}
                 />
               ) : (
                 <WindowStream key={rn} address={p.address} title={p.title} n={rn} />
