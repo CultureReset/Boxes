@@ -2,6 +2,7 @@ import { readFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { run, runJson } from "../exec.js";
+import { isCloudflareAccessUrl } from "../cloudflare-access-url.js";
 
 /**
  * What is running on this computer, read-only: systemd --user units, docker
@@ -102,7 +103,7 @@ async function listeningPorts(served: Map<number, string>): Promise<PortEntry[]>
       continue;
     }
     const direct = /^(0\.0\.0\.0|\*|\[::\]|100\.)/.test(address) && process.env.NODEOS_HOST ? `http://${process.env.NODEOS_HOST}:${port}/` : null;
-    byPort.set(port, { port, address, process: proc, url: served.get(port) ?? direct });
+    byPort.set(port, { port, address, process: proc, url: (() => { const u = served.get(port) ?? direct; return u && isCloudflareAccessUrl(u) ? u : null; })() });
   }
   return [...byPort.values()].sort((a, b) => a.port - b.port);
 }

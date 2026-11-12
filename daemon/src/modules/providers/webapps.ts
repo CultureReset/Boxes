@@ -8,6 +8,7 @@ import { catalogEntries } from "../catalog.js";
 import { bus } from "../../events.js";
 import { isDemo } from "../status.js";
 import { HttpError } from "../../router.js";
+import { isCloudflareAccessUrl, ACCESS_URL_RULE } from "../../cloudflare-access-url.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
 import { effectiveOpenMode } from "../../native-open.js";
@@ -113,6 +114,7 @@ export async function addWebApp(input: { slug?: string; name?: string; url?: str
     } catch {
       throw new HttpError(400, "That doesn't look like a web address");
     }
+    if (!isCloudflareAccessUrl(url)) throw new HttpError(400, ACCESS_URL_RULE);
     const slug = (input.name ?? host).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "site";
     app = { slug: all.some((w) => w.slug === slug) ? `${slug}-${Date.now().toString(36)}` : slug, name: input.name?.trim() || host.split(".")[0].replace(/^\w/, (c) => c.toUpperCase()), url, comment: host, color: input.color ?? "#0a84ff", category: "Web", added: true };
     all.push(app);

@@ -203,9 +203,9 @@ function AddWebApp({ onClose }: { onClose: () => void }) {
     <Sheet title="Add a web app" icon={<Globe size={18} />} onClose={onClose} size="wide" footer={<button type="button" className="btn primary" onClick={onClose}>Done</button>}>
       <div className="card" style={{ padding: 16, marginBottom: 18 }}>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>Any website</div>
-        <p className="dim small" style={{ marginBottom: 12 }}>Runs like an app: no tabs, no address bar, its own window and tile.</p>
+        <p className="dim small" style={{ marginBottom: 12 }}>Must be a Cloudflare Access URL (https://*.voicecommandapi.com). Create the hostname, DNS, and Access first; Tailscale and raw IPs are rejected.</p>
         <div className="form-row">
-          <div className="field" style={{ marginBottom: 0 }}><label>Address</label><input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="pos.toasttab.com" onKeyDown={(e) => e.key === "Enter" && url.trim() && void add({ url, name })} /></div>
+          <div className="field" style={{ marginBottom: 0 }}><label>Address</label><input className="input" value={url} onChange={(e) => setUrl(e.target.value)} placeholder="https://notes.voicecommandapi.com/" onKeyDown={(e) => e.key === "Enter" && url.trim() && void add({ url, name })} /></div>
           <div className="field" style={{ marginBottom: 0 }}><label>Name (optional)</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Toast" /></div>
         </div>
         <button type="button" className="btn primary" style={{ marginTop: 12 }} disabled={!url.trim()} onClick={() => void add({ url, name })}><Plus size={15} /> Add</button>
