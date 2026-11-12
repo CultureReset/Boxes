@@ -17,8 +17,10 @@ export interface AppEntry {
   frameUrl?: string;
   /** Loopback door-proxy URL, used only when the shell itself is on 127.0.0.1. */
   localFrameUrl?: string;
-  /** "tab": open top-level (apps with logins or that block framing). */
-  openIn?: "tab";
+  /** "tab": open top-level (apps with logins or that block framing). "native": launch nativeApp on the desktop. */
+  openIn?: "tab" | "native";
+  /** Linux (or other) app id to launch when openIn is "native", e.g. "linux:appflowy". */
+  nativeApp?: string;
   /** Slug of the app this one lives under (shown inside it, not top level). */
   parent?: string;
   includes?: string[];

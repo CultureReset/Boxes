@@ -65,7 +65,8 @@
     "comment": "AppFlowy",
     "color": "#30d158",
     "category": "This Computer",
-    "open": "frame"
+    "open": "native",
+    "nativeApp": "linux:appflowy"
   },
   {
     "slug": "desktop",

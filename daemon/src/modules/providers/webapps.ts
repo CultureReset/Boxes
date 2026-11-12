@@ -10,6 +10,7 @@ import { isDemo } from "../status.js";
 import { HttpError } from "../../router.js";
 import type { AppEntry } from "../../types.js";
 import { qualify, type AppProvider } from "./types.js";
+import { effectiveOpenMode } from "../../native-open.js";
 
 /**
  * Web apps: any website run as its own chromeless window. This is how
@@ -20,7 +21,8 @@ import { qualify, type AppProvider } from "./types.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
-  open?: "tab" | "frame";
+  open?: "tab" | "frame" | "native";
+  nativeApp?: string;
   slug: string;
   parent?: string;
   includes?: string[];
@@ -37,21 +39,50 @@ export interface WebApp {
 const store = new WorldStore<WebApp[]>("webapps", () => []);
 
 /** Per-app "open" from config/webapps.json (saved apps are copies, so read it live). */
-function openModeFromConfig(slug: string): string | undefined {
+function configEntry(slug: string): { open?: string; nativeApp?: string } | undefined {
   try {
-    const p = WEBAPPS_FILE;
-    const list = JSON.parse(readFileSync(p, "utf8")) as { slug: string; open?: string }[];
-    return list.find((x) => x.slug === slug)?.open;
+    const list = JSON.parse(readFileSync(WEBAPPS_FILE, "utf8")) as { slug: string; open?: string; nativeApp?: string }[];
+    return list.find((x) => x.slug === slug);
   } catch { return undefined; }
+}
+
+function openModeFromConfig(slug: string): string | undefined {
+  return configEntry(slug)?.open;
 }
 
 function windowClass(slug: string): string {
   return `nodeos-web-${slug}`;
 }
 
+
+function openInFrom(w: WebApp): AppEntry["openIn"] {
+  const open = effectiveOpenMode(openModeFromConfig(w.slug), w.open);
+  if (open === "tab" || open === "native") return open;
+  return undefined;
+}
+
 function toEntry(w: WebApp): AppEntry {
+  const icon = w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : "");
+  const base: AppEntry = {
+    id: qualify("web", w.slug),
+    provider: "web",
+    name: w.name,
+    comment: w.comment,
+    exec: w.url,
+    icon,
+    categories: [w.category],
+    source: "webapp",
+    color: w.color,
+    url: w.url,
+    openIn: openInFrom(w),
+    nativeApp: configEntry(w.slug)?.nativeApp ?? w.nativeApp,
+    parent: w.parent ?? grouping(w.slug).parent,
+    includes: w.includes ?? grouping(w.slug).includes,
+  };
+  // Native tiles launch a Linux app; do not allocate or touch a frame proxy.
+  if (base.openIn === "native" && base.nativeApp) return base;
   const f = ensureFrame(w.slug, { url: w.url });
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  return { ...base, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f) };
 }
 
 /**

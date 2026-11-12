@@ -16,6 +16,7 @@ import { androidStatus, watchAndroid } from "./modules/providers/android.js";
 import { getLayout, setLayout, type Layout } from "./modules/layout.js";
 import { readIcon } from "./modules/icons.js";
 import { listWindows, focusWindow, closeWindow, goHome, watchHyprland } from "./modules/windows.js";
+import { maximizeWindow } from "./modules/window-maximize.js";
 import { listDir, recentFiles, searchFiles, newFolder, renamePath, trashPath, readText, readBinary, diskUsage } from "./modules/files.js";
 import { listEvents, upsertEvent, deleteEvent } from "./modules/calendar.js";
 import { searchPackages, listUpdates, updatesStatus, packageJob, installedPackages } from "./modules/packages.js";
@@ -223,6 +224,7 @@ api.post("/api/control/:id/:action", ({ params }) => controlAction(params.id, pa
 api.get("/api/windows", () => listWindows());
 api.post("/api/windows/focus", async ({ body }) => ({ ok: await focusWindow(str(obj(body).address, "address")) }));
 api.post("/api/windows/close", async ({ body }) => ({ ok: await closeWindow(str(obj(body).address, "address")) }));
+api.post("/api/windows/maximize", async ({ body }) => ({ ok: await maximizeWindow(str(obj(body).address, "address")) }));
 api.post("/api/home", async () => ({ ok: await goHome() }));
 
 // ---- Files --------------------------------------------------------------
