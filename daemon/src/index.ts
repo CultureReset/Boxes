@@ -16,7 +16,7 @@ import { androidStatus, watchAndroid } from "./modules/providers/android.js";
 import { getLayout, setLayout, type Layout } from "./modules/layout.js";
 import { readIcon } from "./modules/icons.js";
 import { listWindows, focusWindow, closeWindow, goHome, watchHyprland } from "./modules/windows.js";
-import { listDir, recentFiles, searchFiles, newFolder, renamePath, trashPath, readText, readBinary, diskUsage } from "./modules/files.js";
+import { listDir, listSources, recentFiles, searchFiles, newFolder, renamePath, trashPath, readText, readBinary, diskUsage } from "./modules/files.js";
 import { listEvents, upsertEvent, deleteEvent } from "./modules/calendar.js";
 import { searchPackages, listUpdates, updatesStatus, packageJob, installedPackages } from "./modules/packages.js";
 import { icon as flathubIcon } from "./modules/providers/flathub.js";
@@ -227,8 +227,9 @@ api.post("/api/home", async () => ({ ok: await goHome() }));
 
 // ---- Files --------------------------------------------------------------
 api.get("/api/files", ({ query }) => listDir(query.get("path") ?? "~", query.has("hidden")));
+api.get("/api/files/sources", () => listSources());
 api.get("/api/files/recent", () => recentFiles());
-api.get("/api/files/search", ({ query }) => searchFiles(str(query.get("q"), "q", { max: 100 })));
+api.get("/api/files/search", ({ query }) => searchFiles(str(query.get("q"), "q", { max: 100 }), 40, query.get("source") ?? undefined));
 api.get("/api/files/disk", () => diskUsage());
 api.get("/api/files/text", ({ query }) => readText(str(query.get("path"), "path")).then((text) => ({ text })));
 api.get("/api/files/raw", async ({ query, res }) => {

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
-import { Folder, FileText, Image as ImageIcon, Film, Music, FileSpreadsheet, Presentation, Code2, Archive, AppWindow, File, Search, Plus, Home, Download, Clock, Trash2, Pencil, ExternalLink, HardDrive, ChevronRight, Eye, LayoutGrid, List } from "lucide-react";
+import { Folder, FileText, Image as ImageIcon, Film, Music, FileSpreadsheet, Presentation, Code2, Archive, AppWindow, File, Search, Plus, Home, Download, Clock, Trash2, Pencil, ExternalLink, HardDrive, ChevronRight, Eye, LayoutGrid, List, Lock, Layers } from "lucide-react";
 import { api, useApi } from "../api/client";
-import type { FileEntry, FileKind } from "../api/types";
+import type { FileEntry, FileKind, FileSource } from "../api/types";
 import { Hero } from "../components/Hero";
 import { Sheet } from "../components/Sheet";
 import { useMenu } from "../components/Menu";
@@ -41,6 +41,11 @@ const QUICK = [
   { label: "Videos", path: "~/Videos", Icon: Film },
 ];
 
+const SOURCE_ICON: Record<FileSource["id"], typeof Folder> = { ssd: HardDrive, spinning: Archive, scrap: Layers, images: ImageIcon, documents: FileText };
+
+/** `source:<id>` shows one named source's folders instead of a directory listing. */
+const sourceOf = (p: string) => (p.startsWith("source:") ? p.slice(7) : null);
+
 export function Files({ path }: { path: string }) {
   const [q, setQ] = useState("");
   const [view, setView] = useState<"grid" | "list">("grid");
@@ -48,7 +53,12 @@ export function Files({ path }: { path: string }) {
   const [preview, setPreview] = useState<FileEntry | null>(null);
   const [renaming, setRenaming] = useState<FileEntry | null>(null);
   const [newFolder, setNewFolder] = useState(false);
-  const { data, error, loading, reload } = useApi<{ path: string; entries: FileEntry[] }>(`/api/files?path=${encodeURIComponent(path)}`, [], [path]);
+  const sourceId = sourceOf(path);
+  const special = path === "recent" || sourceId !== null;
+  const { data, error, loading, reload } = useApi<{ path: string; entries: FileEntry[]; readOnly?: boolean }>(special ? null : `/api/files?path=${encodeURIComponent(path)}`, [], [path]);
+  const { data: sources } = useApi<FileSource[]>("/api/files/sources");
+  const source = sourceId ? sources?.find((s) => s.id === sourceId) ?? null : null;
+  const readOnly = Boolean(data?.readOnly) || Boolean(source?.readOnly);
   const { data: recent } = useApi<FileEntry[]>(path === "recent" ? "/api/files/recent" : null);
   const { data: disk } = useApi<{ total: number; used: number } | null>("/api/files/disk");
   const toast = useToast();
@@ -59,12 +69,19 @@ export function Files({ path }: { path: string }) {
       setResults(null);
       return;
     }
-    const t = setTimeout(() => api.get<FileEntry[]>(`/api/files/search?q=${encodeURIComponent(q.trim())}`).then(setResults), 250);
+    const scope = sourceId ? `&source=${encodeURIComponent(sourceId)}` : "";
+    const t = setTimeout(() => api.get<FileEntry[]>(`/api/files/search?q=${encodeURIComponent(q.trim())}${scope}`).then(setResults), 250);
     return () => clearTimeout(t);
-  }, [q]);
+  }, [q, sourceId]);
 
   const crumbs = useMemo(() => {
-    const parts = (data?.path ?? path).replace(/^~\/?/, "").split("/").filter(Boolean);
+    const shown = data?.path ?? path;
+    // Absolute paths (the spinning drive at /hdd, mounted media) get their own root crumb instead of "Home".
+    if (shown.startsWith("/")) {
+      const parts = shown.split("/").filter(Boolean);
+      return parts.map((p, i) => ({ label: i === 0 ? "/" + p : p, path: "/" + parts.slice(0, i + 1).join("/") }));
+    }
+    const parts = shown.replace(/^~\/?/, "").split("/").filter(Boolean);
     return [{ label: "Home", path: "~" }, ...parts.map((p, i) => ({ label: p, path: "~/" + parts.slice(0, i + 1).join("/") }))];
   }, [data?.path, path]);
 
@@ -75,7 +92,7 @@ export function Files({ path }: { path: string }) {
   };
   const openWith = (f: FileEntry) => void api.post("/api/open", { target: f.path }).then(() => toast(`Opening ${f.name}`));
   const trash = (f: FileEntry) => void api.post<{ ok: boolean; message: string }>("/api/files/trash", { path: f.path }).then((r) => { toast(r.message, r.ok ? "ok" : "error"); reload(); });
-  const items = results ?? (path === "recent" ? recent ?? [] : data?.entries ?? []);
+  const items = results ?? (path === "recent" ? recent ?? [] : sourceId ? [] : data?.entries ?? []);
 
   return (
     <>
@@ -87,7 +104,7 @@ export function Files({ path }: { path: string }) {
         </label>
         <Segment value={view} onChange={setView} options={[{ value: "grid", label: "Grid" }, { value: "list", label: "List" }]} />
         <span className="spacer" />
-        <button type="button" className="btn" onClick={() => setNewFolder(true)}><Plus size={15} /> New folder</button>
+        {readOnly ? <span className="dim small row" style={{ gap: 6 }}><Lock size={14} /> Read-only archive</span> : !special && <button type="button" className="btn" onClick={() => setNewFolder(true)}><Plus size={15} /> New folder</button>}
       </div>
 
       <div className="hscroll" style={{ marginBottom: 18 }}>
@@ -98,7 +115,37 @@ export function Files({ path }: { path: string }) {
         ))}
       </div>
 
-      {!results && path !== "recent" && (
+      {sources && sources.some((s) => s.folders.length > 0) && (
+        <div className="hscroll" style={{ marginBottom: 18 }}>
+          {sources.filter((s) => s.folders.length > 0).map((s) => {
+            const Icon = SOURCE_ICON[s.id] ?? Folder;
+            return (
+              <button key={s.id} type="button" title={s.hint} className={`btn pillbtn${sourceId === s.id ? " primary" : ""}`} onClick={() => { setQ(""); navigate("files", undefined, { path: `source:${s.id}` }); }}>
+                <Icon size={15} /> {s.label}{s.readOnly && <Lock size={12} className="dim" />}
+              </button>
+            );
+          })}
+        </div>
+      )}
+
+      {!results && source && (
+        <>
+          <div className="dim small" style={{ marginBottom: 14 }}>{source.hint}</div>
+          <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", marginBottom: 18 }}>
+            {source.folders.map((f) => (
+              <button key={f.path} type="button" className="card" style={{ padding: 16, display: "flex", gap: 12, alignItems: "center", textAlign: "left" }} onClick={() => navigate("files", undefined, { path: f.path })}>
+                <FileGlyph kind="folder" />
+                <span className="stack" style={{ minWidth: 0 }}>
+                  <span className="truncate" style={{ fontWeight: 500 }}>{f.label}</span>
+                  <span className="tiny muted truncate">{f.readOnly ? "Read-only · " : ""}{f.path}</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </>
+      )}
+
+      {!results && !special && (
         <div className="row" style={{ marginBottom: 14, color: "var(--text-2)", flexWrap: "wrap", gap: 4 }}>
           {crumbs.map((c, i) => (
             <span key={c.path} className="row" style={{ gap: 4 }}>
@@ -111,7 +158,7 @@ export function Files({ path }: { path: string }) {
 
       {loading && !data && <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>{[1, 2, 3, 4, 5, 6].map((i) => <Skeleton key={i} h={140} />)}</div>}
       {error && <Empty icon={<Folder size={28} />} title="Can't open this folder" hint={error} />}
-      {!loading && items.length === 0 && !error && <Empty icon={<Folder size={28} />} title={results ? "No matches" : "This folder is empty"} />}
+      {!loading && items.length === 0 && !error && !(source && !results) && <Empty icon={<Folder size={28} />} title={results ? "No matches" : "This folder is empty"} />}
 
       {view === "grid" ? (
         <div className="grid" style={{ gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))" }}>
@@ -152,9 +199,14 @@ export function Files({ path }: { path: string }) {
   );
 
   function fileMenu(f: FileEntry) {
-    return [
+    const view = [
       { label: "Open", icon: <Eye size={14} />, onClick: () => open(f) },
       { label: "Open with default app", icon: <ExternalLink size={14} />, onClick: () => openWith(f) },
+    ];
+    // Spinning drive / scrap archives are read-only; the daemon refuses changes there too.
+    if (readOnly) return view;
+    return [
+      ...view,
       { label: "Rename", icon: <Pencil size={14} />, onClick: () => setRenaming(f) },
       { label: "", divider: true },
       { label: "Move to Trash", icon: <Trash2 size={14} />, danger: true, onClick: () => trash(f) },
