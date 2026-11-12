@@ -68,7 +68,21 @@ describe("planLaunch — one rule for every tile", () => {
     }
   });
 
-  it("on loopback, the frame uses the local door-proxy so the session cookie is sent", () => {
+  it("openIn window: maximized desktop Chrome on the kiosk, fullscreen frame on the phone", () => {
+    const app = web({ id: "web:n8n", openIn: "window" });
+    const local = planLaunch(app, desktop);
+    const remote = planLaunch(app, phone);
+    assert.equal(local.action, "window");
+    assert.equal(local.url, app.frameUrl);
+    assert.notEqual(local.url, app.url);
+    assert.equal(local.stream, false);
+    assert.equal(remote.action, "frame");
+    assert.equal(remote.url, app.frameUrl);
+    assert.equal(planLaunch(app, loop).action, "window");
+    assert.equal(planLaunch(app, loop).url, app.localFrameUrl);
+  });
+
+    it("on loopback, the frame uses the local door-proxy so the session cookie is sent", () => {
     const app = web({ id: "web:n8n" });
     assert.equal(planLaunch(app, loop).url, app.localFrameUrl);
   });

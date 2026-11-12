@@ -5,17 +5,21 @@
  *      launch that OS app: on the local Plasma kiosk, raise + maximize it and
  *      do not stream a JPEG copy into NODE; on a phone or remote shell, stream
  *      the window so the app is still visible.
- *   2. Otherwise, if a door-gated frame-proxy URL exists, open that as a
+ *   2. Otherwise, if the tile is marked open "window" and this is the local
+ *      Plasma kiosk, launch a maximized chromeless Chrome --app at the
+ *      door-gated frame URL (never the public Access hostname). On a phone
+ *      or remote shell, the same tile is a fullscreen in-NODE frame.
+ *   3. Otherwise, if a door-gated frame-proxy URL exists, open that as a
  *      fullscreen in-NODE view — even when the tile was marked "tab". "tab"
  *      only meant "don't iframe the raw Cloudflare Access URL." Once you are
  *      already in NODE, the proxy is the full view and there is no Access wall.
- *   3. Otherwise fall back to a top-level tab (URL with no proxy).
+ *   4. Otherwise fall back to a top-level tab (URL with no proxy).
  *
  * Native-vs-frame is configuration (nativeApp on the tile), not a hardcoded
  * slug. The same functions decide for AppFlowy, n8n, CRM, Rakazo, Odoo, etc.
  */
 
-export type LaunchAction = "native" | "frame" | "tab";
+export type LaunchAction = "native" | "frame" | "tab" | "window";
 
 export interface LaunchPlan {
   action: LaunchAction;
@@ -67,6 +71,9 @@ export function planLaunch(a: LaunchApp, ctx: LaunchContext): LaunchPlan {
     return { action: "native", nativeId, stream: !ctx.localDesktop };
   }
   const frame = resolveFrameSrc(a, ctx.hostname);
+  if (frame && ctx.localDesktop && a.openIn === "window") {
+    return { action: "window", url: frame, stream: false };
+  }
   if (frame) {
     return { action: "frame", url: frame, stream: false };
   }

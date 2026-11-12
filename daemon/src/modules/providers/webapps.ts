@@ -21,7 +21,7 @@ import { effectiveOpenMode } from "../../native-open.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
-  open?: "tab" | "frame" | "native";
+  open?: "tab" | "frame" | "native" | "window";
   nativeApp?: string;
   slug: string;
   parent?: string;
@@ -57,7 +57,7 @@ function windowClass(slug: string): string {
 
 function openInFrom(w: WebApp): AppEntry["openIn"] {
   const open = effectiveOpenMode(openModeFromConfig(w.slug), w.open);
-  if (open === "tab" || open === "native") return open;
+  if (open === "tab" || open === "native" || open === "window") return open;
   return undefined;
 }
 

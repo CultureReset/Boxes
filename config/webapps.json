@@ -56,7 +56,7 @@
     "color": "#ff375f",
     "category": "This Computer",
     "icon": "/home/steve/.local/share/node-icons/n8n.png",
-    "open": "frame"
+    "open": "window"
   },
   {
     "slug": "notes",

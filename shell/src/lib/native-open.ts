@@ -2,7 +2,7 @@
  * Keep in sync with daemon/src/native-open.ts.
  * One launch rule for every NODE tile. No per-app special cases.
  */
-export type LaunchAction = "native" | "frame" | "tab";
+export type LaunchAction = "native" | "frame" | "tab" | "window";
 
 export interface LaunchPlan {
   action: LaunchAction;
@@ -45,6 +45,9 @@ export function planLaunch(a: LaunchApp, ctx: LaunchContext): LaunchPlan {
     return { action: "native", nativeId, stream: !ctx.localDesktop };
   }
   const frame = resolveFrameSrc(a, ctx.hostname);
+  if (frame && ctx.localDesktop && a.openIn === "window") {
+    return { action: "window", url: frame, stream: false };
+  }
   if (frame) {
     return { action: "frame", url: frame, stream: false };
   }
