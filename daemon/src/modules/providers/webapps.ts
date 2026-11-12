@@ -1,4 +1,4 @@
-import { frames } from "../../frameproxy.js";
+import { ensureFrame, frameUrlForFrame, localFrameUrlForFrame } from "../../frameproxy.js";
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -50,7 +50,8 @@ function windowClass(slug: string): string {
 }
 
 function toEntry(w: WebApp): AppEntry {
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  const f = ensureFrame(w.slug, { url: w.url });
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**
@@ -84,6 +85,8 @@ export async function addWebApp(input: { slug?: string; name?: string; url?: str
   }
   app.added = true;
   await store.write(all);
+  // Future app-store / catalog adds inherit a door-gated frame proxy automatically.
+  ensureFrame(app.slug, { url: app.url });
   bus.emit("apps", { provider: "web" });
   return app;
 }
@@ -131,17 +134,6 @@ export const webProvider: AppProvider = {
     return m?.[1];
   },
 };
-
-function frameUrlFor(slug: string, _url: string): string | undefined {
-  const f = frames().find((x) => x.slug === slug);
-  // Prefer the Tailscale frame-proxy port so NODE can iframe the real app UI
-  // without Cloudflare Access (which blanks inside iframes). Same-origin
-  // /frame/<slug>/ is also advertised when NODEOS_FRAME_SAME_ORIGIN=1.
-  if (!f || !f.servePort) return undefined;
-  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${slug}/`;
-  const host = process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
-  return `https://${host}:${f.servePort}${f.path}`;
-}
 
 /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
  *  before it existed pick it up too. OpenClaw lives under Paperclip. */

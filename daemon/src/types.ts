@@ -15,6 +15,8 @@ export interface AppEntry {
   url?: string;
   /** Same app, through the frame proxy, for NODE's in-app view. */
   frameUrl?: string;
+  /** Loopback door-proxy URL, used only when the shell itself is on 127.0.0.1. */
+  localFrameUrl?: string;
   /** "tab": open top-level (apps with logins or that block framing). */
   openIn?: "tab";
   /** Slug of the app this one lives under (shown inside it, not top level). */

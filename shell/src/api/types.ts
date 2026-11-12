@@ -14,6 +14,8 @@ export interface AppEntry {
   desktopFile?: string;
   url?: string;
   frameUrl?: string;
+  /** Loopback door-proxy URL, used only when the shell itself is on 127.0.0.1. */
+  localFrameUrl?: string;
   /** "tab": open top-level (apps with logins or that block framing). */
   openIn?: "tab";
   parent?: string;

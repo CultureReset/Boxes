@@ -1,9 +1,11 @@
 import http from "node:http";
 import net from "node:net";
-import { readFileSync } from "node:fs";
+import { readFileSync, writeFileSync, renameSync, mkdirSync } from "node:fs";
+import { spawn } from "node:child_process";
 import path from "node:path";
 import { requireDoor, isRemote, doorUser, stripDoorCookie } from "./doorauth.js";
 import { fileURLToPath } from "node:url";
+import { assignMissingServePorts, ensureFrameForApp, frameUrlForFrame, localFrameUrlForFrame } from "./frameassign.js";
 
 /**
  * Frame proxies: one loopback port per web app, fronted by `tailscale serve`
@@ -17,16 +19,63 @@ export interface Frame { slug: string; upstream: string; localPort: number; serv
   /** Source address for upstream connections (the app whitelists only this address). */
   localAddress?: string }
 
-const FILE = process.env.NODEOS_FRAMES ?? path.join(path.dirname(fileURLToPath(import.meta.url)), "../../config/frames.json");
+const DEFAULT_FILE = path.join(path.dirname(fileURLToPath(import.meta.url)), "../../config/frames.json");
+
+function framesFile(): string {
+  return process.env.NODEOS_FRAMES ?? DEFAULT_FILE;
+}
 
 export function frames(): Frame[] {
-  try { return JSON.parse(readFileSync(FILE, "utf8")) as Frame[]; } catch { return []; }
+  try { return JSON.parse(readFileSync(framesFile(), "utf8")) as Frame[]; } catch { return []; }
 }
+
+function persistFrames(list: Frame[]): void {
+  const file = framesFile();
+  mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = file + ".tmp";
+  writeFileSync(tmp, JSON.stringify(list, null, 1) + "\n");
+  renameSync(tmp, file);
+}
+
+const startedPorts = new Set<number>();
+const servedPorts = new Set<number>();
+
+/** Best-effort tailnet-only `tailscale serve`. Missing binary or a failed apply must not take the daemon down. */
+function applyServe(f: Frame): void {
+  if (process.env.NODEOS_SKIP_SERVE === "1") return;
+  if (!f.servePort || !f.localPort || servedPorts.has(f.servePort)) return;
+  servedPorts.add(f.servePort);
+  const child = spawn("tailscale", ["serve", "--bg", `--https=${f.servePort}`, `http://127.0.0.1:${f.localPort}`], { stdio: "ignore", detached: true });
+  child.on("error", (e) => console.error(`tailscale serve ${f.slug} :${f.servePort}: ${(e as Error).message}`));
+  child.unref();
+}
+
+/**
+ * Systemic rule: every web tile gets a door-gated frame (localPort + servePort).
+ * Missing servePort is auto-assigned and written back; a slug that is not in
+ * frames.json yet gets a new row. The public Cloudflare URL is never the iframe src.
+ */
+export function ensureFrame(slug: string, opts: { url?: string; upstream?: string; path?: string } = {}): Frame {
+  const { list, frame, changed } = ensureFrameForApp(frames(), slug, opts);
+  if (changed) persistFrames(list);
+  start(frame);
+  applyServe(frame);
+  return frames().find((x) => x.slug === slug) ?? frame;
+}
+
+/** Assign servePort on every existing frame that still has 0, persist, apply serve. */
+export function ensureAllFrameServePorts(): Frame[] {
+  const { list, changed } = assignMissingServePorts(frames());
+  if (changed) persistFrames(list);
+  return changed ? frames() : list;
+}
+
+export { frameUrlForFrame, localFrameUrlForFrame };
 
 /** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
 const FRAME_ANCESTORS = (
   process.env.NODEOS_FRAME_ANCESTORS
-  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
+  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443 http://127.0.0.1:7770 http://localhost:7770"
 ).trim();
 
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
@@ -89,6 +138,8 @@ function upstreamHeaders(f: Frame, h: http.IncomingHttpHeaders): http.OutgoingHt
 }
 
 function start(f: Frame): void {
+  if (!f.localPort || startedPorts.has(f.localPort)) return;
+  startedPorts.add(f.localPort);
   const up = new URL(f.upstream);
   const port = Number(up.port || 80);
   const srv = http.createServer(async (req, res) => {
@@ -119,7 +170,11 @@ function start(f: Frame): void {
 }
 
 export function startFrameProxies(): void {
-  for (const f of frames()) start(f);
+  const list = ensureAllFrameServePorts();
+  for (const f of list) {
+    start(f);
+    applyServe(f);
+  }
 }
 
 

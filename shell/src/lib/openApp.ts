@@ -27,10 +27,12 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
     return;
   }
 
-  // Prefer the REAL full web app inside NODE (fullscreen iframe).
-  const web = a.frameUrl ?? a.url;
-  if (web && a.provider === "web") {
-    return showAppView({ kind: "web", url: web, title: a.name });
+  // Iframe only a door-gated frame proxy — never the raw Cloudflare Access URL
+  // (Access sends X-Frame-Options: DENY and blanks the pane). If no proxy is
+  // advertised, launch a real local window and stream it.
+  const framed = resolveFrameSrc(a);
+  if (framed) {
+    return showAppView({ kind: "web", url: framed, title: a.name });
   }
 
   // Desktop / phone program: reuse its window if it is already open.
@@ -46,4 +48,13 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
     if (w) return openWindowView(w);
   }
   toast?.(`${a.name} started on the desktop, but its window didn't show up yet. Open it from Continue.`, "error");
+}
+
+/** Frame src for the in-app iframe. Returns undefined when the tile must not be iframed. */
+export function resolveFrameSrc(a: AppEntry): string | undefined {
+  if (a.provider !== "web") return undefined;
+  const host = typeof window !== "undefined" ? window.location.hostname : "";
+  const loopback = host === "127.0.0.1" || host === "localhost";
+  if (loopback && a.localFrameUrl) return a.localFrameUrl;
+  return a.frameUrl;
 }
