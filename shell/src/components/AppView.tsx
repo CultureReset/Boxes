@@ -165,28 +165,66 @@ export function AppView() {
         })}
       </div>
 
+      {/*
+        Visual pill stays iPhone-sized (134×5). The click/swipe target is a
+        full-width 48px bar above the iframe: a 5px button is unhit-able, and
+        CSS box-shadow does not enlarge the hit area. A focused cross-origin
+        iframe also swallows Escape, so this bar is the reliable way home.
+      */}
       <button
         type="button"
         aria-label="Return to NODE"
         title="Return to NODE"
         onClick={goHome}
         onContextMenu={(e) => { e.preventDefault(); setSwitcher((s) => !s); }}
+        onPointerDown={(e) => {
+          if (e.button !== 0) return;
+          const el = e.currentTarget;
+          el.setPointerCapture(e.pointerId);
+          const startY = e.clientY;
+          const startX = e.clientX;
+          const finish = (ev: PointerEvent) => {
+            el.removeEventListener("pointerup", finish);
+            el.removeEventListener("pointercancel", finish);
+            try { el.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
+            const dy = startY - ev.clientY;
+            const dx = Math.abs(ev.clientX - startX);
+            if (dy >= 40 && dy > dx) goHome();
+          };
+          el.addEventListener("pointerup", finish);
+          el.addEventListener("pointercancel", finish);
+        }}
         style={{
           position: "absolute",
-          bottom: "calc(env(safe-area-inset-bottom) + 8px)",
-          left: "50%",
-          transform: "translateX(-50%)",
-          width: 134,
-          height: 5,
-          borderRadius: 3,
+          bottom: 0,
+          left: 0,
+          right: 0,
+          height: "calc(env(safe-area-inset-bottom) + 48px)",
+          boxSizing: "border-box",
           border: 0,
+          margin: 0,
           padding: 0,
-          background: "rgba(255,255,255,0.5)",
-          boxShadow: "0 0 0 6px transparent",
+          paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
+          background: "transparent",
           zIndex: 4,
           cursor: "pointer",
+          display: "flex",
+          alignItems: "flex-end",
+          justifyContent: "center",
         }}
-      />
+      >
+        <span
+          aria-hidden="true"
+          style={{
+            width: 134,
+            height: 5,
+            borderRadius: 3,
+            background: "rgba(255,255,255,0.55)",
+            pointerEvents: "none",
+            display: "block",
+          }}
+        />
+      </button>
     </div>
   );
 }
