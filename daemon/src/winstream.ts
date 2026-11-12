@@ -1,15 +1,17 @@
 import type http from "node:http";
 import { spawn } from "node:child_process";
+import { displayEnv, uiDisplay } from "./xdisplay.js";
 
 /**
  * Live view of one desktop window as MJPEG (multipart/x-mixed-replace), so the
  * NODE app can show a desktop program inside its own in-app view. View only.
- * Captures with xwd | convert on the box's X display (:10 under xrdp).
+ * Captures with xwd | convert on the UI display (the landscape seat, usually
+ * :0), not a portrait xrdp session that made apps look mobile.
  */
-function grab(address: string): Promise<Buffer | null> {
+function grab(address: string, display: string): Promise<Buffer | null> {
   return new Promise((resolve) => {
-    const env = { ...process.env, DISPLAY: process.env.DISPLAY ?? ":10.0" };
-    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1280x1280>' -quality 60 jpg:-`, address], { env });
+    const env = displayEnv(display);
+    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1920x1920>' -quality 60 jpg:-`, address], { env });
     const chunks: Buffer[] = [];
     const t = setTimeout(() => p.kill("SIGKILL"), 4000);
     p.stdout.on("data", (c: Buffer) => chunks.push(c));
@@ -23,8 +25,9 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
   const address = u.searchParams.get("address") ?? "";
   const once = u.searchParams.get("once") === "1";
   if (!/^0x[0-9a-f]{1,10}$/i.test(address)) { res.writeHead(400); res.end("bad address"); return; }
+  const display = u.searchParams.get("display") || await uiDisplay();
   if (once) {
-    const f = await grab(address);
+    const f = await grab(address, display);
     if (!f) { res.writeHead(404); res.end("window not available"); return; }
     res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
     res.end(f); return;
@@ -36,7 +39,7 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
   let misses = 0;
   while (alive && misses < 10) {
     const t0 = Date.now();
-    const f = await grab(address);
+    const f = await grab(address, display);
     if (!f) misses++; else {
       misses = 0;
       res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${f.length}\r\n\r\n`);
