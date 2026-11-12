@@ -19,7 +19,6 @@ export const PREFERRED_SERVE_PORTS: Record<string, number> = {
   "llama-swap": 33443,
   supabase: 34443,
   notes: 35443,
-  crm2: 36443,
   pos: 37443,
   tickets: 38443,
   kamra: 39443,
@@ -104,10 +103,16 @@ export function frameHost(): string {
   return process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
 }
 
-/** Tailscale frame URL advertised to the shell. Never a raw Access hostname. */
+/**
+ * Frame URL advertised to the shell. Tailscale frame URLs are retired
+ * (2026-11-12): tiles open top-level on their Cloudflare Access hostname, and
+ * Tailscale is LAN fallback only. Only the same-origin /frame/<slug>/ path is
+ * ever returned, and only when NODEOS_FRAME_SAME_ORIGIN=1. Set
+ * NODEOS_FRAME_TAILSCALE=1 to bring the old ts.net URL back for debugging.
+ */
 export function frameUrlForFrame(f: Frame): string | undefined {
-  if (!f.servePort) return undefined;
   if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${f.slug}/`;
+  if (process.env.NODEOS_FRAME_TAILSCALE !== "1" || !f.servePort) return undefined;
   const path = f.path || "/";
   return `https://${frameHost()}:${f.servePort}${path}`;
 }

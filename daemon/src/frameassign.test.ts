@@ -96,10 +96,13 @@ describe("ensureFrameForApp", () => {
 });
 
 describe("frame URLs", () => {
-  it("builds a Tailscale frame URL, never the raw public hostname", () => {
+  it("advertises no Tailscale frame URL by default (retired 2026-11-12)", () => {
     const f = frame({ slug: "rakazo", servePort: 40443, localPort: 17818, path: "/" });
     delete process.env.NODEOS_FRAME_SAME_ORIGIN;
-    assert.equal(frameUrlForFrame(f), "https://steve-ms-7c02.tail1af4f2.ts.net:40443/");
+    assert.equal(frameUrlForFrame(f), undefined);
+    process.env.NODEOS_FRAME_TAILSCALE = "1";
+    try { assert.equal(frameUrlForFrame(f), "https://steve-ms-7c02.tail1af4f2.ts.net:40443/"); }
+    finally { delete process.env.NODEOS_FRAME_TAILSCALE; }
     assert.equal(localFrameUrlForFrame(f), "http://127.0.0.1:17818/");
     assert.equal(frameUrlForFrame({ ...f, servePort: 0 }), undefined);
   });
@@ -107,8 +110,8 @@ describe("frame URLs", () => {
   it("uses the same-origin path when NODEOS_FRAME_SAME_ORIGIN=1", () => {
     process.env.NODEOS_FRAME_SAME_ORIGIN = "1";
     try {
-      const f = frame({ slug: "crm2", servePort: 36443, path: "/" });
-      assert.equal(frameUrlForFrame(f), "/frame/crm2/");
+      const f = frame({ slug: "rakazo", servePort: 40443, path: "/" });
+      assert.equal(frameUrlForFrame(f), "/frame/rakazo/");
     } finally {
       delete process.env.NODEOS_FRAME_SAME_ORIGIN;
     }
