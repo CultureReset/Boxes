@@ -6,7 +6,8 @@ export { launchHref } from "./native-open";
 
 /** The decision is planLaunch(): a native OS window, or a top-level link.
  *  Web apps are never framed — they open as a full page on their own
- *  Cloudflare hostname, and Back (or the NODE URL) brings the shell back.
+ *  Cloudflare hostname. In the installed app they open in a separate browser
+ *  view (Done returns to NODE); in a browser tab, Back brings the shell back.
  *  On the local Plasma kiosk, native apps raise as one maximized window and
  *  are never also streamed as a JPEG inside NODE. */
 export type AppViewTarget =
@@ -18,9 +19,31 @@ export function showAppView(t: AppViewTarget): void {
   window.dispatchEvent(new CustomEvent<AppViewTarget>("node:app-view", { detail: t }));
 }
 
-/** Leave NODE and load a web app as a normal full page, same tab. */
+/** Installed home-screen app (iOS/Android PWA): standalone or fullscreen, no browser Back. */
+export function isInstalledApp(): boolean {
+  if (typeof window === "undefined") return false;
+  const nav = window.navigator as Navigator & { standalone?: boolean };
+  if (nav.standalone === true) return true;
+  const mm = (q: string) => typeof window.matchMedia === "function" && window.matchMedia(q).matches;
+  return mm("(display-mode: standalone)") || mm("(display-mode: fullscreen)") || mm("(display-mode: minimal-ui)");
+}
+
+/**
+ * Open a web app as a full page on its Cloudflare hostname. Never an iframe.
+ * - Installed app (no Back button): open it in a separate browser view
+ *   (iOS shows it with a "Done" button that returns to NODE), so leaving
+ *   NODE can never strand the user. If the popup is refused, fall back to
+ *   same-tab navigation.
+ * - Normal browser tab: same tab; browser Back returns to NODE.
+ */
 export function openUrl(url: string): void {
   if (!url || url === "about:blank") return;
+  if (isInstalledApp() && !isLocalDesktopShell()) {
+    // No "noopener" feature string: per spec it makes window.open return null
+    // even on success, which would double-navigate. Drop the opener instead.
+    const w = window.open(url, "_blank");
+    if (w) { try { w.opener = null; } catch { /* cross-origin already */ } return; }
+  }
   window.location.assign(url);
 }
 
