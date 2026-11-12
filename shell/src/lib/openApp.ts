@@ -1,9 +1,13 @@
 import { api } from "../api/client";
 import type { AppEntry, WindowEntry } from "../api/types";
+import { isLocalDesktopShell, resolveFrameSrc } from "./open-app-frame";
+export { isLocalDesktopShell, resolveFrameSrc } from "./open-app-frame";
 
 /** Everything opens INSIDE the NODE app: the REAL web app UI in a fullscreen
  *  frame (phone-launcher style), or a live view of a desktop window.
- *  Native rebuilt screens are only used when explicitly requested. */
+ *  Native rebuilt screens are only used when explicitly requested.
+ *  On the local Plasma kiosk, tiles with openIn "window" (n8n) are an
+ *  exception: they raise as one maximized Chrome --app window. */
 export type AppViewTarget =
   | { kind: "web"; url: string; title: string }
   | { kind: "window"; address: string; title: string }
@@ -32,6 +36,13 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
   // advertised, launch a real local window and stream it.
   const framed = resolveFrameSrc(a);
   if (framed) {
+    // Desktop kiosk: maximized native Chrome window, not the phone-style iframe.
+    if (isLocalDesktopShell() && a.openIn === "window") {
+      const r = await api.post<{ ok: boolean; message: string }>("/api/apps/launch", { id: a.id, desktopWindow: true }).catch((e: Error) => ({ ok: false, message: e.message }));
+      if (!r.ok) { toast?.(r.message, "error"); return; }
+      toast?.(`Opening ${a.name}…`, "info");
+      return;
+    }
     return showAppView({ kind: "web", url: framed, title: a.name });
   }
 
@@ -50,11 +61,3 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
   toast?.(`${a.name} started on the desktop, but its window didn't show up yet. Open it from Continue.`, "error");
 }
 
-/** Frame src for the in-app iframe. Returns undefined when the tile must not be iframed. */
-export function resolveFrameSrc(a: AppEntry): string | undefined {
-  if (a.provider !== "web") return undefined;
-  const host = typeof window !== "undefined" ? window.location.hostname : "";
-  const loopback = host === "127.0.0.1" || host === "localhost";
-  if (loopback && a.localFrameUrl) return a.localFrameUrl;
-  return a.frameUrl;
-}

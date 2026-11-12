@@ -17,8 +17,8 @@ export interface AppEntry {
   frameUrl?: string;
   /** Loopback door-proxy URL, used only when the shell itself is on 127.0.0.1. */
   localFrameUrl?: string;
-  /** "tab": open top-level (apps with logins or that block framing). */
-  openIn?: "tab";
+  /** "tab": open the public URL in a new tab. "window": maximized desktop Chrome --app (phone still iframes the frame proxy). */
+  openIn?: "tab" | "window";
   /** Slug of the app this one lives under (shown inside it, not top level). */
   parent?: string;
   includes?: string[];

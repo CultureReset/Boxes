@@ -20,7 +20,7 @@ import { qualify, type AppProvider } from "./types.js";
  * here embeds third-party branding: tiles use a colour and an initial.
  */
 export interface WebApp {
-  open?: "tab" | "frame";
+  open?: "tab" | "frame" | "window";
   slug: string;
   parent?: string;
   includes?: string[];
@@ -49,9 +49,14 @@ function windowClass(slug: string): string {
   return `nodeos-web-${slug}`;
 }
 
+function openInFrom(open: string | undefined): AppEntry["openIn"] {
+  if (open === "tab" || open === "window") return open;
+  return undefined;
+}
+
 function toEntry(w: WebApp): AppEntry {
   const f = ensureFrame(w.slug, { url: w.url });
-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlForFrame(f), localFrameUrl: localFrameUrlForFrame(f), openIn: openInFrom(w.open ?? openModeFromConfig(w.slug)), parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
 }
 
 /**

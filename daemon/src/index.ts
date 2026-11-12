@@ -11,6 +11,7 @@ import { Router, HttpError, num, obj, str, sendJson } from "./router.js";
 import { bus } from "./events.js";
 import { status, uname } from "./modules/status.js";
 import { listApps, launchApp, removeApp, launchWebapp, openPath, refreshAppsCache, providersInfo } from "./modules/apps.js";
+import { launchDesktopFrameWindow } from "./desktop-web-window.js";
 import { catalog, addWebApp, removeWebApp } from "./modules/providers/webapps.js";
 import { androidStatus, watchAndroid } from "./modules/providers/android.js";
 import { getLayout, setLayout, type Layout } from "./modules/layout.js";
@@ -188,7 +189,15 @@ api.post("/api/apps/refresh", async () => {
   await refreshAppsCache();
   return listApps();
 });
-api.post("/api/apps/launch", ({ body }) => launchApp(str(obj(body).id, "id", { max: 256 })));
+api.post("/api/apps/launch", ({ body }) => {
+  const b = obj(body);
+  const id = str(b.id, "id", { max: 256 });
+  if (b.desktopWindow) {
+    const slug = id.startsWith("web:") ? id.slice(4) : id;
+    return launchDesktopFrameWindow(slug);
+  }
+  return launchApp(id);
+});
 api.post("/api/apps/remove", ({ body }) => removeApp(str(obj(body).id, "id", { max: 256 })));
 api.get("/api/webapps/catalog", () => catalog());
 api.post("/api/webapps/add", ({ body }) => {

@@ -11,7 +11,7 @@ import { assignMissingServePorts, ensureFrameForApp, frameUrlForFrame, localFram
  * Frame proxies: one loopback port per web app, fronted by `tailscale serve`
  * (tailnet only). They pass everything through (cookies, websockets) and only
  * remove the headers that stop the NODE app from showing the page inside its
- * own in-app view: X-Frame-Options and CSP frame-ancestors.
+ * own in-app view: X-Frame-Options, CORP, and CSP frame-ancestors.
  */
 export interface Frame { slug: string; upstream: string; localPort: number; servePort: number; path: string;
   /** Trusted reverse-proxy login (e.g. Navidrome ReverseProxyUserHeader): header + user set by the proxy only. */
@@ -81,6 +81,9 @@ const FRAME_ANCESTORS = (
 function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
   const out: http.OutgoingHttpHeaders = { ...h };
   delete out["x-frame-options"];
+  // n8n (and others) send CORP: same-origin, which can block a cross-origin
+  // NODE iframe (shell on :14443, frame on :25443).
+  delete out["cross-origin-resource-policy"];
   let sawCsp = false;
   for (const k of ["content-security-policy", "content-security-policy-report-only"]) {
     const v = out[k];
