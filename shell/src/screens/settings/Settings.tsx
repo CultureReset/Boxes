@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Wifi, Bluetooth, Volume2, Sun, Palette, Bell, BatteryMedium, HardDrive, Download, Info, ChevronRight, Lock, Eye, EyeOff, RefreshCw, Moon, Zap, Check, Image as ImageIcon, Power, Shield, LayoutGrid, Smartphone, Tv, ArrowUp, ArrowDown, Usb, Users, Plus, Trash2, MapPin, Pencil } from "lucide-react";
+import { Wifi, Bluetooth, Volume2, Sun, Palette, Bell, BatteryMedium, HardDrive, Download, Info, ChevronRight, Lock, Eye, EyeOff, RefreshCw, Moon, Zap, Check, Image as ImageIcon, Power, Shield, LayoutGrid, Smartphone, Tv, ArrowUp, ArrowDown, Usb, Users, Plus, Trash2, MapPin, Pencil, Activity } from "lucide-react";
 import { api, useApi } from "../../api/client";
 import type { AudioResult, BluetoothResult, BluetoothDevice, Job, MonitorResult, PackageResult, WifiResult, WifiNetwork, Notification, AndroidStatus, World, Shortcut, AppEntry, AgentsInfo, Look, FeatureStatus } from "../../api/types";
 import { Unavailable, DemoBadge } from "../../components/Unavailable";
@@ -17,8 +17,9 @@ import { useToast } from "../../state/toast";
 import { navigate } from "../../lib/router";
 import { bytes, uptime, timeAgo } from "../../lib/format";
 import { SETTINGS_INDEX } from "./index";
+import { SystemMonitor } from "./SystemMonitor";
 
-const ICONS: Record<string, typeof Wifi> = { worlds: Users, home: LayoutGrid, devices: Smartphone, wifi: Wifi, bluetooth: Bluetooth, sound: Volume2, display: Sun, appearance: Palette, notifications: Bell, power: BatteryMedium, storage: HardDrive, updates: Download, about: Info };
+const ICONS: Record<string, typeof Wifi> = { worlds: Users, home: LayoutGrid, devices: Smartphone, wifi: Wifi, bluetooth: Bluetooth, sound: Volume2, display: Sun, appearance: Palette, notifications: Bell, power: BatteryMedium, storage: HardDrive, system: Activity, updates: Download, about: Info };
 
 export function Settings({ panel, onJob }: { panel?: string; onJob: (id: string) => void }) {
   const { status } = useStatus();
@@ -72,6 +73,7 @@ export function Settings({ panel, onJob }: { panel?: string; onJob: (id: string)
             {active === "power" && <PowerPanel />}
             {active === "storage" && <StoragePanel />}
             {active === "updates" && <UpdatesPanel onJob={onJob} />}
+            {active === "system" && <SystemMonitor />}
             {active === "about" && <AboutPanel />}
           </div>
         )}

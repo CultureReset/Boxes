@@ -348,3 +348,46 @@ export interface Attachment { id: string; name: string; type: string; size: numb
 export interface ChatMessage { role: "user" | "assistant"; content: string; at: string; model?: string; attachments?: Attachment[]; error?: boolean; pending?: boolean }
 export interface Chat { id: string; title: string; model: string; createdAt: string; updatedAt: string; messages: ChatMessage[] }
 export interface ChatSummary { id: string; title: string; model: string; createdAt: string; updatedAt: string; count: number }
+
+/** Live machine vitals from GET /api/system/stats (daemon sysmon). */
+export interface SystemStats {
+  at: string;
+  cpu: {
+    busyPct: number | null;
+    perCore: number[];
+    load: { one: number; five: number; fifteen: number };
+    cores: number;
+    mhz: number | null;
+    model: string | null;
+    tempC: number | null;
+  };
+  mem: {
+    totalMB: number;
+    usedMB: number;
+    availableMB: number;
+    pct: number;
+    swapTotalMB: number;
+    swapUsedMB: number;
+  };
+  gpu: {
+    present: boolean;
+    name: string | null;
+    card: string | null;
+    driver: string | null;
+    busyPct: number | null;
+    tempC: number | null;
+    watts: number | null;
+    wattCap: number | null;
+    fanRpm: number | null;
+    coreMhz: number | null;
+    memMhz: number | null;
+    vramUsedMB: number | null;
+    vramTotalMB: number | null;
+    vramPct: number | null;
+    why?: string;
+  };
+  disks: { filesystem: string; mount: string; totalB: number; usedB: number; availB: number; pct: number }[];
+  power: { gpuWatts: number | null; packageWatts: number | null; note: string | null };
+  temps: { name: string; label: string; celsius: number }[];
+  uptimeSeconds: number;
+}

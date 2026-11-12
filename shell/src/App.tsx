@@ -9,6 +9,7 @@ import { ToastProvider, useToast } from "./state/toast";
 import { api, useApi, useConnected, useEvent } from "./api/client";
 import type { AgentsInfo, Notification } from "./api/types";
 import { TopBar } from "./components/TopBar";
+import { StatusBar } from "./components/StatusBar";
 import { DemoBanner } from "./components/DemoBanner";
 import { TabBar } from "./components/TabBar";
 import { AskBar } from "./components/AskBar";
@@ -138,6 +139,7 @@ function Shell() {
 
   return (
     <div className="frame">
+      <StatusBar />
       <TopBar active={screen} onSearch={() => setSearch(true)} onNotifications={() => setNotifs(true)} unread={unread} onUser={userMenu} />
       <DemoBanner />
       {offline && (

@@ -97,7 +97,8 @@ function AppViewChrome({
         display: "flex",
         alignItems: "center",
         gap: tv ? 16 : 10,
-        paddingTop: "env(safe-area-inset-top)",
+        /* StatusBar already consumes the top safe area. */
+        paddingTop: 0,
         paddingLeft: `max(${tv ? 20 : 12}px, env(safe-area-inset-left))`,
         paddingRight: `max(${tv ? 20 : 12}px, env(safe-area-inset-right))`,
         background: "#10161f",
@@ -207,7 +208,7 @@ export function AppView() {
   if (!cur) return null;
 
   return (
-    <div className="appview" style={{ position: "fixed", inset: 0, zIndex: 900, background: "#10161f", display: "flex", flexDirection: "column" }}>
+    <div className="appview" style={{ position: "fixed", top: "var(--node-statusbar-height, 0px)", left: 0, right: 0, bottom: 0, zIndex: 900, background: "#10161f", display: "flex", flexDirection: "column" }}>
       <AppViewChrome
         title={cur.title}
         tv={tv}
