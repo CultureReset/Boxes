@@ -244,6 +244,7 @@ a.card:hover,
   border-color: var(--line-strong);
 }
 button.card:active,
+a.card:active,
 .card.clickable:active {
   transform: scale(0.99);
 }

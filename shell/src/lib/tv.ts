@@ -11,40 +11,30 @@ export function detectTv(): boolean {
 }
 
 /**
- * Keep every navigation inside the NODE shell, on every display — TV, Plasma,
- * and phone. A new OS window, a target=_blank / _top / _parent link, or a
- * top-level jump to an app origin (Paperclip, Twenty, n8n, …) leaves the
- * shell and drops the header. Intercept those and open the URL in the
- * in-NODE app view, which sits below the persistent TopBar.
+ * One window, one tab, on every display — TV, Plasma, and phone. Web apps
+ * are top-level links to their Cloudflare hostname: leaving NODE for an app
+ * is a normal same-tab navigation, and Back (or the NODE URL) loads the shell
+ * with its header again. Nothing is framed.
  *
- * This runs for the shell's own document only. Cross-origin iframes are
- * stopped separately (sandbox without allow-popups / allow-top-navigation).
+ * What is still stopped is a *new* window or tab (window.open, or a
+ * target=_blank / _top / _parent link in the shell): on the kiosk that would
+ * spawn a separate Chrome window with no way back to NODE. Those become a
+ * same-tab navigation instead.
  */
 let shellGuarded = false;
 export function guardShellEscape(): void {
   if (shellGuarded) return;
   shellGuarded = true;
 
-  const openInShell = (url: string, title?: string) => {
+  const sameTab = (url: string) => {
     const href = String(url);
     if (!href || href === "about:blank") return;
-    window.dispatchEvent(
-      new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: title || href } }),
-    );
-  };
-
-  const leavesShell = (href: string): boolean => {
-    try {
-      return new URL(href, location.href).origin !== location.origin;
-    } catch {
-      return false;
-    }
+    window.location.assign(href);
   };
 
   window.open = ((url?: string | URL, _target?: string, _features?: string) => {
-    const href = url == null ? "" : String(url);
-    openInShell(href);
-    return window;
+    sameTab(url == null ? "" : String(url));
+    return null;
   }) as typeof window.open;
 
   document.addEventListener(
@@ -53,38 +43,17 @@ export function guardShellEscape(): void {
       const a = (e.target as Element | null)?.closest?.("a[href]") as HTMLAnchorElement | null;
       if (!a?.href) return;
       const target = (a.getAttribute("target") || "").toLowerCase();
-      const escapes = target === "_blank" || target === "_top" || target === "_parent";
-      if (!escapes && !leavesShell(a.href)) return;
+      if (target !== "_blank" && target !== "_top" && target !== "_parent") return;
       e.preventDefault();
       e.stopPropagation();
-      openInShell(a.href, a.textContent?.trim() || undefined);
+      sameTab(a.href);
     },
     true,
   );
 
-  const nav = (window as Window & { navigation?: EventTarget & { addEventListener: typeof window.addEventListener } }).navigation;
-  nav?.addEventListener("navigate", (event: Event) => {
-    const e = event as Event & {
-      destination?: { url?: string };
-      canIntercept?: boolean;
-      cancelable?: boolean;
-      preventDefault: () => void;
-      intercept?: (opts: { handler: () => Promise<void> }) => void;
-    };
-    const raw = e.destination?.url;
-    if (!raw || !leavesShell(raw)) return;
-    if (e.cancelable) e.preventDefault();
-    const go = () => { openInShell(raw, new URL(raw, location.href).host); };
-    if (e.canIntercept && e.intercept) {
-      e.intercept({ handler: async () => { go(); } });
-    } else {
-      go();
-    }
-  });
-
   document.addEventListener("fullscreenchange", () => {
-    // An iframe with allow=fullscreen (or a same-document request) can cover
-    // the NODE header. Exit it; the app stays in its pane.
+    // An element going fullscreen inside the shell would cover the NODE
+    // header. Exit it; the content stays in its pane.
     const el = document.fullscreenElement;
     if (el && el !== document.documentElement) {
       void document.exitFullscreen?.();

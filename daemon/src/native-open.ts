@@ -1,30 +1,28 @@
 /**
  * One launch rule for every NODE tile. No per-app special cases.
+ * Keep in sync with shell/src/lib/native-open.ts.
  *
  *   1. If the tile names a native app (nativeApp, or provider is linux/android),
  *      launch that OS app: on the local Plasma kiosk, raise + maximize it and
  *      do not stream a JPEG copy into NODE; on a phone or remote shell, stream
  *      the window so the app is still visible.
- *   2. Otherwise, if a door-gated frame-proxy URL exists, open that as an
- *      in-NODE frame, on every display — including tiles marked "window" or
- *      "tab". A raw Chrome window or a top-level tab would drop the NODE
- *      header (Home, Agents, and every nav item). "tab" only meant "don't
- *      iframe the raw Cloudflare Access URL." Once you are already in NODE,
- *      the proxy is the full view and there is no Access wall.
- *   3. Otherwise, if the tile has only a raw URL, still open it as an in-NODE
- *      frame, never a top-level tab.
+ *   2. Every other (web) tile is a plain top-level link to its own public
+ *      Cloudflare hostname — the tile's `url`. It leaves NODE and loads as a
+ *      normal full page: no iframe, no frame proxy, no Tailscale port. The
+ *      old openIn values "frame", "tab" and "window" all mean this now.
+ *      Back (or visiting the NODE URL again) loads the shell, header and all.
  *
- * Native-vs-frame is configuration (nativeApp on the tile), not a hardcoded
+ * Native-vs-web is configuration (nativeApp on the tile), not a hardcoded
  * slug. The same functions decide for AppFlowy, n8n, CRM, Rakazo, Odoo, etc.
  */
 
-export type LaunchAction = "native" | "frame" | "tab" | "window";
+export type LaunchAction = "native" | "navigate";
 
 export interface LaunchPlan {
   action: LaunchAction;
   /** App id to launch when action is "native". */
   nativeId?: string;
-  /** Door-gated frame URL, or last-resort tab URL. */
+  /** The tile's public Cloudflare hostname, opened as a top-level page. */
   url?: string;
   /** True only for native apps on a phone/remote shell (they can't see Plasma). */
   stream: boolean;
@@ -35,14 +33,11 @@ export interface LaunchApp {
   provider?: string;
   openIn?: string;
   nativeApp?: string;
-  frameUrl?: string;
-  localFrameUrl?: string;
   url?: string;
 }
 
 export interface LaunchContext {
   localDesktop: boolean;
-  hostname: string;
 }
 
 export function nativeLaunchId(a: LaunchApp): string | undefined {
@@ -50,33 +45,24 @@ export function nativeLaunchId(a: LaunchApp): string | undefined {
   return undefined;
 }
 
-/** Prefer config/webapps.json over a stale saved world-store copy. */
-export function effectiveOpenMode(configOpen?: string, savedOpen?: string): string | undefined {
-  return configOpen ?? savedOpen;
-}
-
-/** Frame src: the door-gated proxy, never a raw Access URL. */
-export function resolveFrameSrc(a: LaunchApp, hostname: string): string | undefined {
-  if (nativeLaunchId(a) || a.openIn === "native") return undefined;
-  if (a.provider && a.provider !== "web") return undefined;
-  const loopback = hostname === "127.0.0.1" || hostname === "localhost";
-  if (loopback && a.localFrameUrl) return a.localFrameUrl;
-  return a.frameUrl || undefined;
-}
-
 export function planLaunch(a: LaunchApp, ctx: LaunchContext): LaunchPlan {
   const nativeId = nativeLaunchId(a) ?? (a.provider && a.provider !== "web" && a.id ? a.id : undefined);
   if (nativeId) {
     return { action: "native", nativeId, stream: !ctx.localDesktop };
   }
-  const frame = resolveFrameSrc(a, ctx.hostname);
-  // "window" and "tab" must not leave the NODE shell — the persistent header
-  // (Home, Agents, and every nav item) has to stay on screen for every app.
-  if (frame) {
-    return { action: "frame", url: frame, stream: false };
-  }
-  if (a.url) {
-    return { action: "frame", url: a.url, stream: false };
-  }
-  return { action: "frame", stream: false };
+  // Every web tile — whatever its old openIn ("frame", "tab", "window") —
+  // is a plain top-level link to its own hostname. Never an iframe, never a
+  // frame-proxy or Tailscale URL. NODE Home is one Back (or one visit) away.
+  return { action: "navigate", url: a.url || undefined, stream: false };
+}
+
+/** href for a tile that opens as a top-level link, or undefined for native tiles. */
+export function launchHref(a: LaunchApp): string | undefined {
+  const plan = planLaunch(a, { localDesktop: false });
+  return plan.action === "navigate" ? plan.url : undefined;
+}
+
+/** Prefer config/webapps.json over a stale saved world-store copy. */
+export function effectiveOpenMode(configOpen?: string, savedOpen?: string): string | undefined {
+  return configOpen ?? savedOpen;
 }

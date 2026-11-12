@@ -1,12 +1,13 @@
 import { describe, it } from "node:test";
 import assert from "node:assert/strict";
-import { nativeLaunchId, effectiveOpenMode, resolveFrameSrc, planLaunch, type LaunchApp } from "./native-open.js";
+import { nativeLaunchId, effectiveOpenMode, planLaunch, launchHref, type LaunchApp } from "./native-open.js";
 
-const desktop = { localDesktop: true, hostname: "steve-ms-7c02.tail1af4f2.ts.net" };
-const phone = { localDesktop: false, hostname: "steve-ms-7c02.tail1af4f2.ts.net" };
-const loop = { localDesktop: true, hostname: "127.0.0.1" };
+const desktop = { localDesktop: true };
+const phone = { localDesktop: false };
 
-function web(partial: Partial<LaunchApp> & Pick<LaunchApp, "id">): LaunchApp {
+/** /api/apps still carries frame-proxy fields; the launcher must ignore them. */
+type ApiTile = LaunchApp & { frameUrl?: string; localFrameUrl?: string };
+function web(partial: Partial<ApiTile> & Pick<ApiTile, "id">): ApiTile {
   return {
     provider: "web",
     frameUrl: "https://steve-ms-7c02.tail1af4f2.ts.net:25443/",
@@ -15,6 +16,28 @@ function web(partial: Partial<LaunchApp> & Pick<LaunchApp, "id">): LaunchApp {
     ...partial,
   };
 }
+
+/** Every web tile in config/webapps.json with its public Cloudflare hostname. */
+const CF_TILES: [string, string, string?][] = [
+  ["web:openjarvis", "https://jarvis.voicecommandapi.com/"],
+  ["web:rakazo", "https://rakazo.voicecommandapi.com/"],
+  ["web:twenty-crm", "https://crm.voicecommandapi.com/"],
+  ["web:crm2", "https://crm2.voicecommandapi.com/"],
+  ["web:paperclip", "https://paperclip.voicecommandapi.com/"],
+  ["web:n8n", "https://automations.voicecommandapi.com/", "window"],
+  ["web:desktop", "https://desktop.voicecommandapi.com/"],
+  ["web:openclaw", "https://openclaw.voicecommandapi.com/"],
+  ["web:uptime-kuma", "https://status.voicecommandapi.com/"],
+  ["web:navidrome", "https://music.voicecommandapi.com/"],
+  ["web:searxng", "https://search.voicecommandapi.com/"],
+  ["web:llama-swap", "https://llm.voicecommandapi.com/ui"],
+  ["web:supabase", "https://supabase.voicecommandapi.com/"],
+  ["web:pos", "https://pos.voicecommandapi.com/"],
+  ["web:tickets", "https://tickets.voicecommandapi.com/"],
+  ["web:kamra", "https://kamra.voicecommandapi.com/"],
+  ["web:litellm", "https://api.voicecommandapi.com/ui/", "tab"],
+  ["web:mcp", "https://hub.voicecommandapi.com/", "tab"],
+];
 
 describe("nativeLaunchId", () => {
   it("uses nativeApp for any tile, and has no hardcoded slugs", () => {
@@ -55,62 +78,38 @@ describe("planLaunch — one rule for every tile", () => {
     assert.deepEqual(planLaunch(notes, phone), { action: "native", nativeId: "linux:appflowy", stream: true });
   });
 
-  it("web tiles with a frame proxy (n8n, CRM, Rakazo, POS, …) open that frame, locally and remotely", () => {
-    for (const id of ["web:n8n", "web:twenty-crm", "web:crm2", "web:rakazo", "web:pos", "web:paperclip", "web:openjarvis", "web:kamra", "web:tickets", "web:supabase"]) {
-      const app = web({ id });
-      const local = planLaunch(app, desktop);
-      const remote = planLaunch(app, phone);
-      assert.equal(local.action, "frame", id);
-      assert.equal(remote.action, "frame", id);
-      assert.equal(local.url, app.frameUrl);
-      assert.equal(local.stream, false);
-      assert.equal(remote.stream, false);
+  it("every web tile is a top-level link to its Cloudflare hostname, on every display", () => {
+    for (const [id, url, openIn] of CF_TILES) {
+      const app = web({ id, url, openIn });
+      for (const ctx of [desktop, phone]) {
+        const plan = planLaunch(app, ctx);
+        assert.deepEqual(plan, { action: "navigate", url, stream: false }, id);
+        assert.notEqual(plan.url, app.frameUrl, id);
+        assert.notEqual(plan.url, app.localFrameUrl, id);
+        assert.match(plan.url!, /^https:\/\/[a-z0-9-]+\.voicecommandapi\.com\//, id);
+      }
+      assert.equal(launchHref(app), url, id);
     }
   });
 
-  it("openIn window: still an in-NODE frame on the kiosk and the phone, so the header stays", () => {
-    const app = web({ id: "web:n8n", openIn: "window" });
-    const local = planLaunch(app, desktop);
-    const remote = planLaunch(app, phone);
-    assert.equal(local.action, "frame");
-    assert.equal(local.url, app.frameUrl);
-    assert.notEqual(local.url, app.url);
-    assert.equal(local.stream, false);
-    assert.equal(remote.action, "frame");
-    assert.equal(remote.url, app.frameUrl);
-    assert.equal(planLaunch(app, loop).action, "frame");
-    assert.equal(planLaunch(app, loop).url, app.localFrameUrl);
+  it("never plans a frame for a web tile, whatever its old openIn", () => {
+    for (const openIn of [undefined, "frame", "tab", "window"]) {
+      const app = web({ id: "web:n8n", openIn });
+      assert.equal(planLaunch(app, desktop).action, "navigate");
+      assert.equal(planLaunch(app, phone).action, "navigate");
+      assert.equal(planLaunch(app, desktop).url, "https://automations.voicecommandapi.com/");
+    }
   });
 
-    it("on loopback, the frame uses the local door-proxy so the session cookie is sent", () => {
-    const app = web({ id: "web:n8n" });
-    assert.equal(planLaunch(app, loop).url, app.localFrameUrl);
-  });
-
-  it("tiles marked tab still use the door-gated frame once you are in NODE, not a raw Access URL", () => {
-    const litellm = web({
-      id: "web:litellm",
-      openIn: "tab",
-      frameUrl: "https://steve-ms-7c02.tail1af4f2.ts.net:23443/ui/",
-      localFrameUrl: "http://127.0.0.1:17805/ui/",
-      url: "https://api.voicecommandapi.com/ui/",
-    });
-    const plan = planLaunch(litellm, desktop);
-    assert.equal(plan.action, "frame");
-    assert.equal(plan.url, litellm.frameUrl);
-    assert.notEqual(plan.url, litellm.url);
-  });
-
-  it("a web tile with no proxy still opens as an in-NODE frame, not a top-level tab", () => {
-    const app = { id: "web:loose", provider: "web", url: "https://example.com" };
-    assert.deepEqual(planLaunch(app, desktop), { action: "frame", url: "https://example.com", stream: false });
-    assert.deepEqual(planLaunch(app, phone), { action: "frame", url: "https://example.com", stream: false });
+  it("a web tile with no url plans navigate with no target (the shell reports it)", () => {
+    assert.deepEqual(planLaunch({ id: "web:loose", provider: "web" }, phone), { action: "navigate", url: undefined, stream: false });
   });
 });
 
-describe("resolveFrameSrc", () => {
-  it("never returns a frame when a nativeApp is set", () => {
-    const notes = web({ id: "web:notes", nativeApp: "linux:appflowy", openIn: "native" });
-    assert.equal(resolveFrameSrc(notes, desktop.hostname), undefined);
+describe("launchHref", () => {
+  it("is undefined for native tiles, so they stay buttons", () => {
+    assert.equal(launchHref(web({ id: "web:notes", nativeApp: "linux:appflowy", openIn: "native" })), undefined);
+    assert.equal(launchHref({ id: "linux:grok-bot", provider: "linux" }), undefined);
+    assert.equal(launchHref({ id: "android:com.facebook.katana", provider: "android" }), undefined);
   });
 });
