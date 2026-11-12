@@ -63,6 +63,14 @@ export interface FileEntry {
   hidden?: boolean;
 }
 
+export interface FileSource {
+  id: "ssd" | "spinning" | "scrap" | "images" | "documents";
+  label: string;
+  hint: string;
+  readOnly: boolean;
+  folders: { label: string; path: string; readOnly: boolean }[];
+}
+
 export interface CalendarEvent {
   id: string;
   title: string;

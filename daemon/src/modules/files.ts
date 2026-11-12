@@ -5,6 +5,9 @@ import { demoFiles } from "../demo.js";
 import { isDemo } from "./status.js";
 import { HttpError } from "../router.js";
 import type { FileEntry, FileKind } from "../types.js";
+import { checkPath, defaultLayout, fileSources, FileAccessError, type FileSource, type SourceId } from "./filesources.js";
+
+const LAYOUT = defaultLayout(HOME);
 
 const KIND_BY_EXT: Record<string, FileKind> = {
   jpg: "image", jpeg: "image", png: "image", gif: "image", webp: "image", svg: "image", heic: "image", avif: "image",
@@ -26,21 +29,42 @@ export function kindOf(name: string, isDir: boolean): FileKind {
   return KIND_BY_EXT[ext] ?? "other";
 }
 
-/** Expand `~` and refuse anything outside the home directory or mounted media. */
-export function resolveUserPath(p: string): string {
-  const expanded = p === "~" || p === "" ? HOME : p.startsWith("~/") ? path.join(HOME, p.slice(2)) : p;
-  const abs = path.resolve(expanded);
-  const allowed = [HOME, "/media", "/run/media", "/mnt"];
-  if (!allowed.some((root) => abs === root || abs.startsWith(root + path.sep))) throw new HttpError(403, "Path outside your files");
-  return abs;
+/**
+ * Expand `~` and refuse anything outside home, mounted media or the spinning
+ * drive (/hdd). Symlinks are followed before the check, so `~/Downloads` (which
+ * lives on /hdd) is allowed while a link out to e.g. /etc is not. Pass "write"
+ * for anything that changes the disk: the spinning drive is read-only.
+ */
+export function resolveUserPath(p: string, want: "read" | "write" = "read"): string {
+  try {
+    return checkPath(p, LAYOUT, want).abs;
+  } catch (e) {
+    if (e instanceof FileAccessError) throw new HttpError(e.status, e.message);
+    throw e;
+  }
+}
+
+/** True when changes under `p` are refused (spinning drive / scrap archive). */
+export function isReadOnly(p: string): boolean {
+  try {
+    return checkPath(p, LAYOUT, "read").mode === "ro";
+  } catch {
+    return true;
+  }
+}
+
+/** Named places for the Files screen: SSD, spinning drive, scrap, images, documents. */
+export async function listSources(): Promise<FileSource[]> {
+  if (await isDemo()) return fileSources(LAYOUT, (p) => p === HOME || p.startsWith(HOME + path.sep)).map((s) => ({ ...s, folders: s.folders.map((f) => ({ ...f, path: displayPath(f.path) })) }));
+  return fileSources(LAYOUT).map((s) => ({ ...s, folders: s.folders.map((f) => ({ ...f, path: displayPath(f.path) })) }));
 }
 
 export function displayPath(abs: string): string {
   return abs === HOME ? "~" : abs.startsWith(HOME + path.sep) ? "~" + abs.slice(HOME.length) : abs;
 }
 
-export async function listDir(p: string, showHidden = false): Promise<{ path: string; entries: FileEntry[] }> {
-  if (await isDemo()) return { path: p || "~", entries: demoFiles(p || "~") };
+export async function listDir(p: string, showHidden = false): Promise<{ path: string; entries: FileEntry[]; readOnly: boolean }> {
+  if (await isDemo()) return { path: p || "~", entries: demoFiles(p || "~"), readOnly: false };
   const abs = resolveUserPath(p);
   const names = await readdir(abs, { withFileTypes: true }).catch(() => {
     throw new HttpError(404, "Folder not found");
@@ -57,7 +81,7 @@ export async function listDir(p: string, showHidden = false): Promise<{ path: st
     }
   }
   entries.sort((a, b) => Number(b.kind === "folder") - Number(a.kind === "folder") || a.name.localeCompare(b.name, undefined, { numeric: true }));
-  return { path: displayPath(abs), entries };
+  return { path: displayPath(abs), entries, readOnly: isReadOnly(abs) };
 }
 
 /** Recently used files from the freedesktop recently-used.xbel bookmark file. */
@@ -88,16 +112,26 @@ export async function recentFiles(limit = 12): Promise<FileEntry[]> {
   return out.sort((a, b) => b.modified.localeCompare(a.modified)).slice(0, limit);
 }
 
-export async function searchFiles(q: string, limit = 40): Promise<FileEntry[]> {
+export async function searchFiles(q: string, limit = 40, source?: string): Promise<FileEntry[]> {
   const needle = q.toLowerCase();
   if (await isDemo()) {
     const all = ["~", "~/Documents", "~/Pictures"].flatMap((d) => demoFiles(d));
     return all.filter((f) => f.name.toLowerCase().includes(needle)).slice(0, limit);
   }
+  let starts = [HOME];
+  if (source) {
+    const src = fileSources(LAYOUT).find((s) => s.id === (source as SourceId));
+    if (!src) throw new HttpError(404, "Unknown source");
+    starts = src.folders.map((f) => f.path);
+  }
+  // The spinning drive is big (scrapers alone are ~800 GB): stop after a few seconds.
+  const deadline = Date.now() + 5000;
   const out: FileEntry[] = [];
+  const seen = new Set<string>();
   const skip = new Set(["node_modules", ".git", ".cache", ".local", ".config", ".npm", ".cargo", ".rustup", ".venv", "__pycache__"]);
   async function walk(dir: string, depth: number) {
-    if (out.length >= limit || depth > 6) return;
+    if (out.length >= limit || depth > 6 || Date.now() > deadline || seen.has(dir)) return;
+    seen.add(dir);
     let entries: import("node:fs").Dirent[];
     try {
       entries = await readdir(dir, { withFileTypes: true });
@@ -119,27 +153,34 @@ export async function searchFiles(q: string, limit = 40): Promise<FileEntry[]> {
       if (e.isDirectory()) await walk(full, depth + 1);
     }
   }
-  await walk(HOME, 0);
+  for (const start of starts) {
+    try {
+      await walk(resolveUserPath(start), 0);
+    } catch {
+      /* folder gone or outside the allowlist */
+    }
+  }
   return out;
 }
 
 export async function newFolder(parent: string, name: string): Promise<void> {
   if (await isDemo()) return;
   if (/[/\\]/.test(name) || name === "." || name === "..") throw new HttpError(400, "Invalid folder name");
-  await mkdir(path.join(resolveUserPath(parent), name));
+  await mkdir(path.join(resolveUserPath(parent, "write"), name));
 }
 
 export async function renamePath(p: string, name: string): Promise<void> {
   if (await isDemo()) return;
-  if (/[/\\]/.test(name)) throw new HttpError(400, "Invalid name");
-  const abs = resolveUserPath(p);
+  if (/[/\\]/.test(name) || name === "." || name === "..") throw new HttpError(400, "Invalid name");
+  const abs = resolveUserPath(p, "write");
+  resolveUserPath(path.join(path.dirname(abs), name), "write");
   await rename(abs, path.join(path.dirname(abs), name));
 }
 
 /** Moves to the XDG trash via gio when available; otherwise refuses (never rm -rf silently). */
 export async function trashPath(p: string): Promise<{ ok: boolean; message: string }> {
   if (await isDemo()) return { ok: true, message: "Moved to Trash" };
-  const abs = resolveUserPath(p);
+  const abs = resolveUserPath(p, "write");
   const { run, has } = await import("../exec.js");
   if (await has("gio")) {
     const r = await run("gio", ["trash", abs]);
@@ -159,8 +200,12 @@ export async function readText(p: string, max = 200_000): Promise<string> {
   return readFile(abs, "utf8");
 }
 
+/** Previews are read whole into memory, so cap them; bigger files open in their own app. */
+const MAX_RAW = 512 * 1024 * 1024;
+
 export async function readBinary(p: string): Promise<{ body: Buffer; type: string }> {
   const abs = resolveUserPath(p);
+  if ((await stat(abs)).size > MAX_RAW) throw new HttpError(413, "File too large to preview");
   const ext = abs.split(".").pop()?.toLowerCase() ?? "";
   const types: Record<string, string> = { jpg: "image/jpeg", jpeg: "image/jpeg", png: "image/png", gif: "image/gif", webp: "image/webp", svg: "image/svg+xml", avif: "image/avif", pdf: "application/pdf", mp4: "video/mp4", webm: "video/webm", mp3: "audio/mpeg", flac: "audio/flac", ogg: "audio/ogg", wav: "audio/wav", m4a: "audio/mp4" };
   return { body: await readFile(abs), type: types[ext] ?? "application/octet-stream" };
