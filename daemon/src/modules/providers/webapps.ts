@@ -132,14 +132,15 @@ export const webProvider: AppProvider = {
   },
 };
 
-function frameUrlFor(slug: string, url: string): string | undefined {
+function frameUrlFor(slug: string, _url: string): string | undefined {
   const f = frames().find((x) => x.slug === slug);
-  if (!f) return undefined;
-  const u = new URL(url);
-  // Cloudflare Access apps already sit on :443 with Access in front. Rewriting
-  // them onto Tailscale serve ports would break framing from node.voicecommandapi.com.
-  if (u.hostname.endsWith(".voicecommandapi.com") || !f.servePort) return undefined;
-  return `https://${u.hostname}:${f.servePort}${f.path}`;
+  // Prefer the Tailscale frame-proxy port so NODE can iframe the real app UI
+  // without Cloudflare Access (which blanks inside iframes). Same-origin
+  // /frame/<slug>/ is also advertised when NODEOS_FRAME_SAME_ORIGIN=1.
+  if (!f || !f.servePort) return undefined;
+  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${slug}/`;
+  const host = process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
+  return `https://${host}:${f.servePort}${f.path}`;
 }
 
 /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved

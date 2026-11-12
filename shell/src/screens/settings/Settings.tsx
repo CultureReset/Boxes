@@ -1,5 +1,5 @@
-import { useState } from "react";
-import { Wifi, Bluetooth, Volume2, Sun, Palette, Bell, BatteryMedium, HardDrive, Download, Info, ChevronRight, Lock, Eye, EyeOff, RefreshCw, Moon, Zap, Check, Image as ImageIcon, Power, Shield, LayoutGrid, Smartphone, Tv, ArrowUp, ArrowDown, Usb, Users, Plus, Trash2, MapPin, Pencil } from "lucide-react";
+import { useState, useEffect, useCallback } from "react";
+import { Wifi, Bluetooth, Volume2, Sun, Palette, Bell, BatteryMedium, HardDrive, Download, Info, ChevronRight, Lock, Eye, EyeOff, RefreshCw, Moon, Zap, Check, Image as ImageIcon, Power, Shield, LayoutGrid, Smartphone, Tv, ArrowUp, ArrowDown, Usb, Users, Plus, Trash2, MapPin, Pencil, Activity, Cpu, Thermometer, Server, Container } from "lucide-react";
 import { api, useApi } from "../../api/client";
 import type { AudioResult, BluetoothResult, BluetoothDevice, Job, MonitorResult, PackageResult, WifiResult, WifiNetwork, Notification, AndroidStatus, World, Shortcut, AppEntry, AgentsInfo, Look, FeatureStatus } from "../../api/types";
 import { Unavailable, DemoBadge } from "../../components/Unavailable";
@@ -18,7 +18,7 @@ import { navigate } from "../../lib/router";
 import { bytes, uptime, timeAgo } from "../../lib/format";
 import { SETTINGS_INDEX } from "./index";
 
-const ICONS: Record<string, typeof Wifi> = { worlds: Users, home: LayoutGrid, devices: Smartphone, wifi: Wifi, bluetooth: Bluetooth, sound: Volume2, display: Sun, appearance: Palette, notifications: Bell, power: BatteryMedium, storage: HardDrive, updates: Download, about: Info };
+const ICONS: Record<string, typeof Wifi> = { worlds: Users, home: LayoutGrid, devices: Smartphone, wifi: Wifi, bluetooth: Bluetooth, sound: Volume2, display: Sun, appearance: Palette, notifications: Bell, power: BatteryMedium, storage: HardDrive, system: Activity, updates: Download, about: Info };
 
 export function Settings({ panel, onJob }: { panel?: string; onJob: (id: string) => void }) {
   const { status } = useStatus();
@@ -72,6 +72,7 @@ export function Settings({ panel, onJob }: { panel?: string; onJob: (id: string)
             {active === "power" && <PowerPanel />}
             {active === "storage" && <StoragePanel />}
             {active === "updates" && <UpdatesPanel onJob={onJob} />}
+            {active === "system" && <SystemPanel />}
             {active === "about" && <AboutPanel />}
           </div>
         )}
@@ -360,6 +361,181 @@ function UpdatesPanel({ onJob }: { onJob: (id: string) => void }) {
     </>
   );
 }
+
+
+function barPct(n: number | null | undefined, warn = 80, crit = 95) {
+  const v = Math.max(0, Math.min(100, Number(n) || 0));
+  const color = v >= crit ? "var(--red)" : v >= warn ? "#ff9f0a" : "linear-gradient(90deg, var(--blue), var(--purple))";
+  return (
+    <div style={{ height: 8, borderRadius: 4, background: "rgba(255,255,255,.1)", overflow: "hidden" }}>
+      <div style={{ height: "100%", width: `${v}%`, borderRadius: 4, background: color }} />
+    </div>
+  );
+}
+
+function MetricCard({ icon, title, value, sub, pct }: { icon: React.ReactNode; title: string; value: string; sub?: string; pct?: number | null }) {
+  return (
+    <div className="card" style={{ padding: 14, display: "flex", flexDirection: "column", gap: 8, minWidth: 0 }}>
+      <div className="row" style={{ gap: 8 }}><span className="dim">{icon}</span><span className="small dim" style={{ fontWeight: 600, textTransform: "uppercase", letterSpacing: ".04em" }}>{title}</span></div>
+      <div style={{ fontSize: 22, fontWeight: 650 }}>{value}</div>
+      {pct != null && barPct(pct)}
+      {sub && <div className="dim small">{sub}</div>}
+    </div>
+  );
+}
+
+function SystemPanel() {
+  const [stats, setStats] = useState<{
+    at: string;
+    cpu: { busyPct: number | null; load: { one: number; five: number; fifteen: number }; cores: number; mhz: number | null; model: string | null; tempC: number | null; perCore: number[] };
+    mem: { totalMB: number; usedMB: number; availableMB: number; pct: number; swapTotalMB: number; swapUsedMB: number };
+    gpu: { present: boolean; name: string | null; busyPct: number | null; tempC: number | null; watts: number | null; wattCap: number | null; fanRpm: number | null; coreMhz: number | null; vramUsedMB: number | null; vramTotalMB: number | null; vramPct: number | null; why?: string };
+    disks: { mount: string; totalB: number; usedB: number; availB: number; pct: number }[];
+    power: { gpuWatts: number | null; packageWatts: number | null; note: string | null };
+    temps: { name: string; label: string; celsius: number }[];
+    uptimeSeconds: number;
+  } | null>(null);
+  const [procs, setProcs] = useState<{ pid: number; cpu: number; mem: number; rssKB: number; user: string; command: string }[]>([]);
+  const [containers, setContainers] = useState<{ available: boolean; containers: { name: string; status: string; cpu: string; memUsage: string; memPct: string }[]; error?: string } | null>(null);
+  const [services, setServices] = useState<{ user: { unit: string; description: string; memoryB: number | null; cpuNSec: number | null; sub: string }[]; system: { unit: string; description: string; memoryB: number | null; cpuNSec: number | null; sub: string }[] } | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const [s, p, c, sv] = await Promise.all([
+        api.get<NonNullable<typeof stats>>("/api/system/stats"),
+        api.get<typeof procs>("/api/system/processes?limit=20"),
+        api.get<NonNullable<typeof containers>>("/api/system/containers"),
+        api.get<NonNullable<typeof services>>("/api/system/services"),
+      ]);
+      setStats(s);
+      setProcs(p ?? []);
+      setContainers(c);
+      setServices(sv);
+      setErr(null);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const id = setInterval(() => void load(), 3000);
+    return () => clearInterval(id);
+  }, [load]);
+
+  const cpu = stats?.cpu;
+  const mem = stats?.mem;
+  const gpu = stats?.gpu;
+
+  return (
+    <>
+      <PanelTitle title="System Monitor" sub={stats ? `Updated ${new Date(stats.at).toLocaleTimeString()} · up ${uptime(stats.uptimeSeconds)}` : "Live CPU, GPU, memory, disks and what’s running"} right={<button type="button" className="btn ghost sm" onClick={() => void load()}><RefreshCw size={14} /> Refresh</button>} />
+      {err && <div className="card" style={{ padding: 12, marginBottom: 12, color: "var(--red)" }}>{err}</div>}
+      {!stats && !err && <Skeleton h={180} />}
+      {stats && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12, marginBottom: 16 }}>
+            <MetricCard icon={<Cpu size={16} />} title="CPU" value={cpu?.busyPct != null ? `${cpu.busyPct}%` : "—"} pct={cpu?.busyPct} sub={[cpu?.tempC != null ? `${cpu.tempC}°C` : null, cpu?.mhz ? `${cpu.mhz} MHz` : null, `load ${cpu?.load.one?.toFixed(2)}`, `${cpu?.cores ?? "?"} thr`].filter(Boolean).join(" · ")} />
+            <MetricCard icon={<HardDrive size={16} />} title="Memory" value={mem ? `${mem.usedMB} / ${mem.totalMB} MB` : "—"} pct={mem?.pct} sub={mem ? `${mem.pct}% · swap ${mem.swapUsedMB}/${mem.swapTotalMB} MB · ${mem.availableMB} MB free` : undefined} />
+            <MetricCard icon={<Activity size={16} />} title="GPU" value={gpu?.present ? (gpu.busyPct != null ? `${gpu.busyPct}%` : "—") : "None"} pct={gpu?.busyPct} sub={gpu?.present ? [gpu.name, gpu.tempC != null ? `${gpu.tempC}°C` : null, gpu.watts != null ? `${gpu.watts} W` : null, gpu.vramUsedMB != null ? `VRAM ${gpu.vramUsedMB}/${gpu.vramTotalMB} MB` : null, gpu.fanRpm != null ? `${gpu.fanRpm} RPM` : null].filter(Boolean).join(" · ") : (gpu?.why ?? "No GPU")} />
+            <MetricCard icon={<Thermometer size={16} />} title="Power" value={stats.power.gpuWatts != null ? `${stats.power.gpuWatts} W GPU` : "—"} sub={[stats.power.packageWatts != null ? `CPU pkg ${stats.power.packageWatts} W` : null, stats.power.note].filter(Boolean).join(" · ") || "GPU power from amdgpu hwmon"} />
+          </div>
+
+          {!!stats.disks.length && (
+            <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+              <div className="row" style={{ marginBottom: 10 }}><HardDrive size={16} className="dim" /><span style={{ fontWeight: 600 }}>Disks</span></div>
+              {stats.disks.map((d) => (
+                <div key={d.mount} style={{ marginBottom: 10 }}>
+                  <div className="row" style={{ marginBottom: 4 }}><span className="t">{d.mount}</span><span className="spacer" /><span className="dim small">{bytes(d.usedB)} / {bytes(d.totalB)} ({d.pct}%)</span></div>
+                  {barPct(d.pct)}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {!!stats.temps.length && (
+            <div className="card" style={{ padding: 14, marginBottom: 14 }}>
+              <div className="row" style={{ marginBottom: 8 }}><Thermometer size={16} className="dim" /><span style={{ fontWeight: 600 }}>Temperatures</span></div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(160px, 1fr))", gap: 8 }}>
+                {stats.temps.map((t) => (
+                  <div key={`${t.name}-${t.label}`} className="row" style={{ gap: 8 }}><span className="dim small">{t.name}/{t.label}</span><span className="spacer" /><span style={{ fontWeight: 600 }}>{t.celsius}°C</span></div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          <div className="card" style={{ padding: 14, marginBottom: 14, overflow: "auto" }}>
+            <div className="row" style={{ marginBottom: 8 }}><Server size={16} className="dim" /><span style={{ fontWeight: 600 }}>Top processes</span></div>
+            <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+              <thead><tr className="dim small" style={{ textAlign: "left" }}><th style={{ padding: "4px 6px" }}>PID</th><th>CPU%</th><th>MEM%</th><th>RSS</th><th>Command</th></tr></thead>
+              <tbody>
+                {procs.map((p) => (
+                  <tr key={p.pid} style={{ borderTop: "1px solid var(--line)" }}>
+                    <td style={{ padding: "5px 6px" }} className="dim">{p.pid}</td>
+                    <td>{p.cpu.toFixed(1)}</td>
+                    <td>{p.mem.toFixed(1)}</td>
+                    <td className="dim">{bytes(p.rssKB * 1024)}</td>
+                    <td className="truncate" title={`${p.user} ${p.command}`}>{p.command}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div className="card" style={{ padding: 14, marginBottom: 14, overflow: "auto" }}>
+            <div className="row" style={{ marginBottom: 8 }}><Container size={16} className="dim" /><span style={{ fontWeight: 600 }}>Docker containers</span></div>
+            {!containers?.available && <div className="dim small">{containers?.error ?? "Docker unavailable"}</div>}
+            {containers?.available && !containers.containers.length && <div className="dim small">No running containers</div>}
+            {!!containers?.containers?.length && (
+              <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                <thead><tr className="dim small" style={{ textAlign: "left" }}><th style={{ padding: "4px 6px" }}>Name</th><th>CPU</th><th>Memory</th><th>Status</th></tr></thead>
+                <tbody>
+                  {containers.containers.map((c) => (
+                    <tr key={c.name} style={{ borderTop: "1px solid var(--line)" }}>
+                      <td style={{ padding: "5px 6px", fontWeight: 500 }}>{c.name}</td>
+                      <td>{c.cpu}</td>
+                      <td>{c.memUsage} <span className="dim">({c.memPct})</span></td>
+                      <td className="dim small">{c.status}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            )}
+          </div>
+
+          <div className="card" style={{ padding: 14, marginBottom: 14, overflow: "auto" }}>
+            <div className="row" style={{ marginBottom: 8 }}><Server size={16} className="dim" /><span style={{ fontWeight: 600 }}>Systemd services</span><span className="spacer" /><span className="dim small">user {services?.user.length ?? 0} · system {services?.system.length ?? 0}</span></div>
+            {(["user", "system"] as const).map((scope) => {
+              const rows = services?.[scope] ?? [];
+              if (!rows.length) return null;
+              return (
+                <div key={scope} style={{ marginBottom: 12 }}>
+                  <div className="dim small" style={{ margin: "6px 0", textTransform: "uppercase", letterSpacing: ".05em", fontWeight: 600 }}>{scope}</div>
+                  <table style={{ width: "100%", borderCollapse: "collapse", fontSize: 13 }}>
+                    <thead><tr className="dim small" style={{ textAlign: "left" }}><th style={{ padding: "4px 6px" }}>Unit</th><th>Memory</th><th>CPU time</th><th>State</th></tr></thead>
+                    <tbody>
+                      {rows.slice(0, 30).map((s) => (
+                        <tr key={`${scope}-${s.unit}`} style={{ borderTop: "1px solid var(--line)" }}>
+                          <td style={{ padding: "5px 6px" }}><span style={{ fontWeight: 500 }}>{s.unit}</span>{s.description && <div className="dim small truncate">{s.description}</div>}</td>
+                          <td>{s.memoryB != null ? bytes(s.memoryB) : "—"}</td>
+                          <td className="dim">{s.cpuNSec != null ? `${(s.cpuNSec / 1e9).toFixed(1)}s` : "—"}</td>
+                          <td className="dim small">{s.sub}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              );
+            })}
+          </div>
+        </>
+      )}
+      <style>{`.settings-layout table th, .settings-layout table td { vertical-align: top; }`}</style>
+    </>
+  );
+}
+
 
 function AboutPanel() {
   const { status } = useStatus();

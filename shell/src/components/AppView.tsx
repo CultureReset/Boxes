@@ -1,4 +1,30 @@
 import { useEffect, useMemo, useState } from "react";
+
+/** iOS Safari does not paint multipart/x-mixed-replace in <img>; poll single JPEGs instead. */
+function WindowStream({ address, title, n }: { address: string; title: string; n: number }) {
+  const [src, setSrc] = useState(() => `/api/windows/stream?address=${encodeURIComponent(address)}&once=1&n=${n}&t=0`);
+  useEffect(() => {
+    let alive = true;
+    let t = 0;
+    let timer: number | undefined;
+    const bump = () => {
+      if (!alive) return;
+      t += 1;
+      setSrc(`/api/windows/stream?address=${encodeURIComponent(address)}&once=1&n=${n}&t=${t}`);
+      timer = window.setTimeout(bump, 400);
+    };
+    timer = window.setTimeout(bump, 400);
+    return () => { alive = false; if (timer) window.clearTimeout(timer); };
+  }, [address, n]);
+  return (
+    <img
+      alt={title}
+      src={src}
+      style={{ width: "100%", height: "auto", maxHeight: "100%", objectFit: "contain", display: "block", margin: "0 auto", background: "#0a0d13" }}
+    />
+  );
+}
+
 import { ChevronLeft, ExternalLink, Home, LayoutGrid, RotateCw, X } from "lucide-react";
 import type { AppViewTarget } from "../lib/openApp";
 import { NativeApp } from "../native/NativeApp";
@@ -139,7 +165,7 @@ export function AppView() {
                   style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#fff" }}
                 />
               ) : (
-                <img key={rn} alt={p.title} src={`/api/windows/stream?address=${encodeURIComponent(p.address)}&fps=4&n=${rn}`} style={{ width: "100%", height: "auto", display: "block" }} />
+                <WindowStream key={rn} address={p.address} title={p.title} n={rn} />
               )}
             </div>
           );

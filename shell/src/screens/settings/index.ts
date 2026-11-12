@@ -18,5 +18,6 @@ export const SETTINGS_INDEX: SettingsEntry[] = [
   { id: "power", title: "Battery & Power", keywords: ["battery", "power", "sleep", "performance"], color: "#30d158" },
   { id: "storage", title: "Storage", keywords: ["storage", "disk", "space"], color: "#8e8e93" },
   { id: "updates", title: "Software Update", keywords: ["update", "upgrade", "packages"], color: "#636e7b" },
+  { id: "system", title: "System Monitor", keywords: ["system", "cpu", "gpu", "ram", "disk", "monitor", "temperature", "docker", "services", "processes", "vitals"], color: "#ff9f0a" },
   { id: "about", title: "About", keywords: ["about", "version", "system", "kernel"], color: "#636e7b" },
 ];
