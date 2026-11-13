@@ -1,0 +1,148 @@
+# LIVE copy of /home/steve/.cloudflared/config.yml (named tunnel ai-gateway, user unit cloudflared-ai-gateway.service).
+# Committed BEFORE each live change (GitHub-first). No secrets: the credentials JSON stays on the machine.
+# SMS rules come from CultureReset/smsgw-relay deploy/cloudflared/ingress-sms.yml (keep in sync).
+# Updated 2026-11-13: + sms.voicecommandapi.com (move off Tailscale Funnel :8443).
+tunnel: 2955cfe8-609b-4e1e-a103-7b341d7005c5
+credentials-file: /home/steve/.cloudflared/2955cfe8-609b-4e1e-a103-7b341d7005c5.json
+ingress:
+  # LiteLLM API (existing) — keep admin UI/SSO blocked
+  - hostname: api.voicecommandapi.com
+    path: "^/ui.*"
+    service: http_status:403
+  - hostname: api.voicecommandapi.com
+    path: "^/(sso|login).*"
+    service: http_status:403
+  - hostname: api.voicecommandapi.com
+    service: http://127.0.0.1:4000
+
+  # n8n (existing)
+  # 2026-11-11: n8n webhooks/forms are loopback-only (Email Router -> 127.0.0.1:5678,
+  # intake -> cloud-api-push on loopback). Access bypasses /webhook*, so block them here.
+  # Tailnet frame :25443 still serves /webhook* for tailnet callers.
+  - hostname: automations.voicecommandapi.com
+    path: "(?i)^/+(webhook|form)"
+    service: http_status:403
+  - hostname: automations.voicecommandapi.com
+    service: http://127.0.0.1:17804
+
+  # AppFlowy notes (existing)
+  - hostname: notes.voicecommandapi.com
+    service: http://127.0.0.1:17812
+
+  # NODE static app portal (Access already on node.) — big-button launcher, no passkey
+  - hostname: node.voicecommandapi.com
+    path: "^/portal.*"
+    service: http://127.0.0.1:7690
+
+  # NODE door + chisel tunnel path
+  - hostname: node.voicecommandapi.com
+    path: "^/tunnel.*"
+    service: http://127.0.0.1:7710
+  - hostname: node.voicecommandapi.com
+    service: http://127.0.0.1:7700
+
+  # OpenJarvis UI (proxies /v1,/health,/api to :8000)
+  - hostname: jarvis.voicecommandapi.com
+    service: http://127.0.0.1:17801
+
+  # Paperclip
+  - hostname: paperclip.voicecommandapi.com
+    service: http://127.0.0.1:17803
+
+  # MCP hub (Bearer token auth of its own)
+  - hostname: hub.voicecommandapi.com
+    service: http://127.0.0.1:7790
+
+  # Twenty CRM stacks
+  - hostname: crm.voicecommandapi.com
+    service: http://127.0.0.1:17802
+  # crm2 / nextgent-crm (second Twenty, :3020) removed 2026-11-12.
+
+  # Nextgent POS (Odoo)
+  - hostname: pos.voicecommandapi.com
+    service: http://127.0.0.1:17814
+
+  # Pretix tickets
+  - hostname: tickets.voicecommandapi.com
+    service: http://127.0.0.1:17815
+
+  # Kamra
+  - hostname: kamra.voicecommandapi.com
+    service: http://127.0.0.1:17816
+
+  # Supabase Studio
+  - hostname: supabase.voicecommandapi.com
+    service: http://127.0.0.1:17817
+
+  # Uptime Kuma (host network :3002)
+  - hostname: status.voicecommandapi.com
+    service: http://127.0.0.1:17808
+
+  # Navidrome
+  - hostname: music.voicecommandapi.com
+    service: http://127.0.0.1:17809
+
+  # OpenClaw gateway
+  - hostname: openclaw.voicecommandapi.com
+    service: http://127.0.0.1:17807
+
+  # llama-swap
+  - hostname: llm.voicecommandapi.com
+    service: http://127.0.0.1:17811
+
+  # SearXNG
+  - hostname: search.voicecommandapi.com
+    service: http://127.0.0.1:17806
+
+  # catch-all
+  - hostname: rakazo.voicecommandapi.com
+    service: http://127.0.0.1:17818
+
+
+
+  # HOME launcher alias — COMMENTED until Access covers this hostname in dashboard.
+  # Add to Access app "NODE apps" (reusable policy "Matt only"):
+  #   Public hostname: home.voicecommandapi.com
+  # Then uncomment the two lines below and:
+  #   systemctl --user restart cloudflared-ai-gateway.service
+  # - hostname: home.voicecommandapi.com
+  #   service: http://127.0.0.1:7690
+
+  # Selkies desktop shadow of the physical TV seat (:0, 1920x1080) — ACTIVE.
+  # Cloudflare Access ("Matt only") is in front of this hostname (verified
+  # 2026-11-12: unauthenticated requests 302 to the Access login). Route:
+  # NODE frame proxy :17819 (verifies the Access JWT) -> Selkies 127.0.0.1:8081.
+  # This is NOT xrdp. Live since Nov 4.
+  - hostname: desktop.voicecommandapi.com
+    service: http://127.0.0.1:17819
+
+  - hostname: crawl.voicecommandapi.com
+    service: http://127.0.0.1:17810
+  - hostname: minidlna.voicecommandapi.com
+    service: http://127.0.0.1:17820
+  # SMS relay (smsgw-relay :8787) — replaces Tailscale Funnel :8443
+  # Webhooks from callers that cannot send custom headers or log in. Access BYPASS is scoped to
+  # exactly these two paths; the relay itself verifies signatures and fails closed:
+  #   /sms-hook  Supabase Auth Send-SMS hook   -> Standard Webhooks HMAC (SUPABASE_HOOK_SECRET)
+  #   /inbound   SMS Gateway for Android hook  -> X-Signature HMAC (SMSGW_WEBHOOK_SIGNING_KEY)
+  - hostname: sms.voicecommandapi.com
+    path: "^/(sms-hook|inbound)/?$"
+    service: http://127.0.0.1:8787
+
+  # Machine callers that CAN send headers (gcr-api-clean on Vercel) use an Access service token
+  # (CF-Access-Client-Id / CF-Access-Client-Secret) and still send X-Relay-Secret. /health is for
+  # Matt (browser login) and the uptime check (service token). cloudflared validates the Access JWT.
+  - hostname: sms.voicecommandapi.com
+    path: "^/(send|health)/?$"
+    service: http://127.0.0.1:8787
+    originRequest:
+      access:
+        required: true
+        teamName: autumn-bread-a4ec
+        audTag:
+          - a27101e81943cd52a5274c60ed4bf62662a7043a09a68bfe73840d23fce05c2f
+
+  - hostname: sms.voicecommandapi.com
+    service: http_status:404
+
+  - service: http_status:404
