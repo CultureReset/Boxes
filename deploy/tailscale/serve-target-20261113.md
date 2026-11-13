@@ -24,3 +24,17 @@ tailscale funnel --https=8443 off
 Rollback: `tailscale funnel --bg --https=10000 http://127.0.0.1:7700` and
 `tailscale funnel --bg --https=10000 --set-path=/tunnel http://127.0.0.1:7710` (same for 8443 per
 smsgw-relay `deploy/tailscale/funnel-8443.current.txt`).
+
+## Applied 2026-11-13 (CST)
+
+- 15:38 `sms.voicecommandapi.com` live (tunnel restart once; `config/cloudflared-config.yml`).
+- 15:42 Funnel OFF on :10000; :10000 re-added tailnet-only (`/` -> :7700, `/tunnel` -> :7710).
+- 15:45 Funnel :8443 trimmed to `/send` only (`/inbound`, `/sms-hook` removed). `/send` stays public on Funnel
+  **only** for the Supabase Edge Function `sms-inbound` (project cyber check), whose `RELAY_URL` secret still
+  points at it and whose deployed code sends no Access headers. Finish per CultureReset/smsgw-relay docs/MIGRATION.md.
+- After state: `serve-after-20261113.json`.
+- Consumers moved: gcr-api-clean (Vercel prod+preview env + CultureReset/gcr-api-clean#120), sms-door PIN link
+  (CultureReset/sms-door 08ecade). Not moved (need Matt): approval gateway in /opt/node-approvals (root-owned; its
+  SMS/ntfy approval links and passkey rp_id are still the tailnet host; moving to node.voicecommandapi.com needs sudo
+  and passkey re-enrollment); TV kiosk stays on tailnet :14443 (its Cloudflare Access session has expired, so
+  node.voicecommandapi.com would show an interactive Access login on the TV).
