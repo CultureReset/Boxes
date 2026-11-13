@@ -1,0 +1,345 @@
+diff --git a/config/frames.json b/config/frames.json
+index 6d112e4..0d2e762 100644
+--- a/config/frames.json
++++ b/config/frames.json
+@@ -118,7 +118,7 @@
+   "slug": "supabase",
+   "upstream": "http://127.0.0.1:54323",
+   "localPort": 17817,
+-  "servePort": 0,
++  "servePort": 34443,
+   "path": "/"
+  },
+  {
+diff --git a/daemon/src/exec.ts b/daemon/src/exec.ts
+index ef38f3d..0ad1bfb 100644
+--- a/daemon/src/exec.ts
++++ b/daemon/src/exec.ts
+@@ -72,9 +72,9 @@ export async function runJson<T>(cmd: string, args: string[] = [], opts?: { time
+  * Launch a long-lived desktop process detached from the daemon so that
+  * closing the daemon never takes user apps down with it.
+  */
+-export function launchDetached(cmd: string, args: string[] = [], cwd?: string): boolean {
++export function launchDetached(cmd: string, args: string[] = [], cwd?: string, env?: NodeJS.ProcessEnv): boolean {
+   try {
+-    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: process.env });
++    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: env ? { ...process.env, ...env } : process.env });
+     child.on("error", () => {});
+     child.unref();
+     return true;
+diff --git a/daemon/src/frameproxy.ts b/daemon/src/frameproxy.ts
+index 3c3df6a..84abb0f 100644
+--- a/daemon/src/frameproxy.ts
++++ b/daemon/src/frameproxy.ts
+@@ -26,7 +26,7 @@ export function frames(): Frame[] {
+ /** Origins allowed to embed these apps. Never '*'. Cloudflare Access front door + Tailscale door. */
+ const FRAME_ANCESTORS = (
+   process.env.NODEOS_FRAME_ANCESTORS
+-  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443"
++  ?? "https://node.voicecommandapi.com https://steve-ms-7c02.tail1af4f2.ts.net https://steve-ms-7c02.tail1af4f2.ts.net:10000 https://steve-ms-7c02.tail1af4f2.ts.net:14443 http://127.0.0.1:7770 http://localhost:7770"
+ ).trim();
+ 
+ function fixHeaders(h: http.IncomingHttpHeaders): http.OutgoingHttpHeaders {
+diff --git a/daemon/src/modules/providers/linux.ts b/daemon/src/modules/providers/linux.ts
+index 7621dd9..45f8413 100644
+--- a/daemon/src/modules/providers/linux.ts
++++ b/daemon/src/modules/providers/linux.ts
+@@ -1,6 +1,8 @@
+ import { readdir, readFile } from "node:fs/promises";
+ import path from "node:path";
+ import { has, launchDetached, run } from "../../exec.js";
++import { displayEnv, uiDisplay } from "../../xdisplay.js";
++import { ensureClaudeUiProfile, placeDesktopAppWindow } from "../../desktop-window.js";
+ import { HOME } from "../../paths.js";
+ import { demoApps } from "../../demo.js";
+ import { isDemo } from "../status.js";
+@@ -122,12 +124,28 @@ export const linuxProvider: AppProvider = {
+     const app = (await scan()).find((a) => a.id === qualify("linux", localId));
+     if (!app) return { ok: false, message: "App not found" };
+     if (await isDemo()) return { ok: true, message: `Would open ${app.name}` };
++    const env = displayEnv(await uiDisplay());
++    // Claude Desktop is single-instance and already running on the portrait
++    // xrdp display. A normal launch just raises that 816px window, which NODE
++    // then streams as a mobile layout. Use a separate profile on the
++    // landscape UI display and size the window for a desktop view.
++    if (localId === "com.anthropic.Claude") {
++      const profile = ensureClaudeUiProfile();
++      const ok = launchDetached("claude-desktop", [`--user-data-dir=${profile}`], undefined, env);
++      if (ok) void placeDesktopAppWindow(env.DISPLAY ?? ":0", "com.anthropic.Claude");
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    }
+     if (app.desktopFile && (await has("uwsm-app"))) {
+-      return launchDetached("uwsm-app", ["--", `${localId}.desktop`]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++      const ok = launchDetached("uwsm-app", ["--", `${localId}.desktop`], undefined, env);
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    }
++    if (await has("gtk-launch")) {
++      const ok = launchDetached("gtk-launch", [localId], undefined, env);
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+     }
+-    if (await has("gtk-launch")) return launchDetached("gtk-launch", [localId]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+     const parts = app.exec.replace(/%[a-zA-Z]/g, "").trim().split(/\s+/);
+-    return launchDetached(parts[0], parts.slice(1)) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    const ok = launchDetached(parts[0], parts.slice(1), undefined, env);
++    return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+   },
+   async remove(localId) {
+     const app = (await scan()).find((a) => a.id === qualify("linux", localId));
+diff --git a/daemon/src/modules/providers/webapps.ts b/daemon/src/modules/providers/webapps.ts
+index eebc862..a64d6df 100644
+--- a/daemon/src/modules/providers/webapps.ts
++++ b/daemon/src/modules/providers/webapps.ts
+@@ -50,7 +50,7 @@ function windowClass(slug: string): string {
+ }
+ 
+ function toEntry(w: WebApp): AppEntry {
+-  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, frameUrl: frameUrlFor(w.slug, w.url), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
++  return { id: qualify("web", w.slug), provider: "web", name: w.name, comment: w.comment, exec: w.url, icon: w.icon ?? (existsSync(`${process.env.HOME}/.local/share/node-icons/${w.slug}.png`) ? `${process.env.HOME}/.local/share/node-icons/${w.slug}.png` : ""), categories: [w.category], source: "webapp", color: w.color, url: w.url, ...frameUrls(w.slug), openIn: (w.open ?? openModeFromConfig(w.slug)) === "tab" ? "tab" : undefined, parent: w.parent ?? grouping(w.slug).parent, includes: w.includes ?? grouping(w.slug).includes };
+ }
+ 
+ /**
+@@ -132,15 +132,19 @@ export const webProvider: AppProvider = {
+   },
+ };
+ 
+-function frameUrlFor(slug: string, _url: string): string | undefined {
++function frameUrls(slug: string): { frameUrl?: string; localFrameUrl?: string } {
+   const f = frames().find((x) => x.slug === slug);
+   // Prefer the Tailscale frame-proxy port so NODE can iframe the real app UI
+   // without Cloudflare Access (which blanks inside iframes). Same-origin
+   // /frame/<slug>/ is also advertised when NODEOS_FRAME_SAME_ORIGIN=1.
+-  if (!f || !f.servePort) return undefined;
+-  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return `/frame/${slug}/`;
++  // localFrameUrl is for a shell on 127.0.0.1, where door_session is host-only
++  // on loopback and would not be sent to the Tailscale hostname.
++  if (!f) return {};
++  const localFrameUrl = f.localPort ? `http://127.0.0.1:${f.localPort}${f.path}` : undefined;
++  if (process.env.NODEOS_FRAME_SAME_ORIGIN === "1") return { frameUrl: `/frame/${slug}/`, localFrameUrl };
++  if (!f.servePort) return { localFrameUrl };
+   const host = process.env.NODEOS_FRAME_HOST ?? "steve-ms-7c02.tail1af4f2.ts.net";
+-  return `https://${host}:${f.servePort}${f.path}`;
++  return { frameUrl: `https://${host}:${f.servePort}${f.path}`, localFrameUrl };
+ }
+ 
+ /** Grouping (parent / includes) comes from config/webapps.json, so tiles saved
+diff --git a/daemon/src/modules/windows.ts b/daemon/src/modules/windows.ts
+index 3658157..9aa0858 100644
+--- a/daemon/src/modules/windows.ts
++++ b/daemon/src/modules/windows.ts
+@@ -1,6 +1,7 @@
+ import net from "node:net";
+ import path from "node:path";
+ import { has, run } from "../exec.js";
++import { displayEnv, uiDisplay } from "../xdisplay.js";
+ import { bus } from "../events.js";
+ import { demoWindows } from "../demo.js";
+ import { isDemo } from "./status.js";
+@@ -24,8 +25,9 @@ interface HyprClient {
+ export async function listWindows(): Promise<WindowEntry[]> {
+   if (await isDemo()) return demoWindows;
+   if (!(await has("hyprctl")) && await has("wmctrl")) {
+-    const r = await run("wmctrl", ["-lpGx"]);
+-    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";
++    const env = displayEnv(await uiDisplay());
++    const r = await run("wmctrl", ["-lpGx"], { env });
++    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"], { env })).stdout.trim() : "";
+     const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";
+     const out: WindowEntry[] = [];
+     // Two things were broken here and they stopped the whole daemon compiling.
+@@ -72,14 +74,14 @@ export async function listWindows(): Promise<WindowEntry[]> {
+ 
+ export async function focusWindow(address: string): Promise<boolean> {
+   if (await isDemo()) return true;
+-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address])).ok;
++  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address], { env: displayEnv(await uiDisplay()) })).ok;
+   const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
+   return r.ok;
+ }
+ 
+ export async function closeWindow(address: string): Promise<boolean> {
+   if (await isDemo()) return true;
+-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address])).ok;
++  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address], { env: displayEnv(await uiDisplay()) })).ok;
+   const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
+   return r.ok;
+ }
+@@ -88,7 +90,7 @@ export async function closeWindow(address: string): Promise<boolean> {
+ export async function goHome(): Promise<boolean> {
+   if (await isDemo()) return true;
+   if (!(await has("hyprctl")) && await has("wmctrl")) {
+-    const r = await run("wmctrl", ["-xa", SHELL_CLASS]);
++    const r = await run("wmctrl", ["-xa", SHELL_CLASS], { env: displayEnv(await uiDisplay()) });
+     return r.ok;
+   }
+   const r = await run("hyprctl", ["dispatch", "focuswindow", `class:${SHELL_CLASS}`]);
+diff --git a/daemon/src/types.ts b/daemon/src/types.ts
+index df43074..ad49c79 100644
+--- a/daemon/src/types.ts
++++ b/daemon/src/types.ts
+@@ -15,6 +15,8 @@ export interface AppEntry {
+   url?: string;
+   /** Same app, through the frame proxy, for NODE's in-app view. */
+   frameUrl?: string;
++  /** Loopback frame-proxy URL (same host as a 127.0.0.1 shell, so door_session is sent). */
++  localFrameUrl?: string;
+   /** "tab": open top-level (apps with logins or that block framing). */
+   openIn?: "tab";
+   /** Slug of the app this one lives under (shown inside it, not top level). */
+diff --git a/daemon/src/winstream.ts b/daemon/src/winstream.ts
+index e6e8b65..2599edf 100644
+--- a/daemon/src/winstream.ts
++++ b/daemon/src/winstream.ts
+@@ -1,15 +1,17 @@
+ import type http from "node:http";
+ import { spawn } from "node:child_process";
++import { displayEnv, uiDisplay } from "./xdisplay.js";
+ 
+ /**
+  * Live view of one desktop window as MJPEG (multipart/x-mixed-replace), so the
+  * NODE app can show a desktop program inside its own in-app view. View only.
+- * Captures with xwd | convert on the box's X display (:10 under xrdp).
++ * Captures with xwd | convert on the UI display (the landscape seat, usually
++ * :0), not a portrait xrdp session that made apps look mobile.
+  */
+-function grab(address: string): Promise<Buffer | null> {
++function grab(address: string, display: string): Promise<Buffer | null> {
+   return new Promise((resolve) => {
+-    const env = { ...process.env, DISPLAY: process.env.DISPLAY ?? ":10.0" };
+-    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1280x1280>' -quality 60 jpg:-`, address], { env });
++    const env = displayEnv(display);
++    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1920x1920>' -quality 60 jpg:-`, address], { env });
+     const chunks: Buffer[] = [];
+     const t = setTimeout(() => p.kill("SIGKILL"), 4000);
+     p.stdout.on("data", (c: Buffer) => chunks.push(c));
+@@ -23,8 +25,9 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
+   const address = u.searchParams.get("address") ?? "";
+   const once = u.searchParams.get("once") === "1";
+   if (!/^0x[0-9a-f]{1,10}$/i.test(address)) { res.writeHead(400); res.end("bad address"); return; }
++  const display = u.searchParams.get("display") || await uiDisplay();
+   if (once) {
+-    const f = await grab(address);
++    const f = await grab(address, display);
+     if (!f) { res.writeHead(404); res.end("window not available"); return; }
+     res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
+     res.end(f); return;
+@@ -36,7 +39,7 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
+   let misses = 0;
+   while (alive && misses < 10) {
+     const t0 = Date.now();
+-    const f = await grab(address);
++    const f = await grab(address, display);
+     if (!f) misses++; else {
+       misses = 0;
+       res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${f.length}\r\n\r\n`);
+diff --git a/shell/public/sw.js b/shell/public/sw.js
+index fbfdebe..0f3dc64 100644
+--- a/shell/public/sw.js
++++ b/shell/public/sw.js
+@@ -2,7 +2,7 @@
+  * - /api/* is NEVER intercepted or cached: it always goes over the network to the desktop.
+  * - Navigations: served from cache instantly, refreshed in the background.
+  * - Static assets (hashed /assets/*, icons, manifest): cache-first. */
+-const CACHE = "node-shell-v5";
++const CACHE = "node-shell-v6";
+ const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+ 
+ self.addEventListener("install", (e) => {
+diff --git a/shell/src/api/types.ts b/shell/src/api/types.ts
+index 4ce3050..f8431f6 100644
+--- a/shell/src/api/types.ts
++++ b/shell/src/api/types.ts
+@@ -14,6 +14,8 @@ export interface AppEntry {
+   desktopFile?: string;
+   url?: string;
+   frameUrl?: string;
++  /** Loopback frame-proxy URL (same host as a 127.0.0.1 shell, so door_session is sent). */
++  localFrameUrl?: string;
+   /** "tab": open top-level (apps with logins or that block framing). */
+   openIn?: "tab";
+   parent?: string;
+diff --git a/shell/src/lib/openApp.ts b/shell/src/lib/openApp.ts
+index b38679b..695d856 100644
+--- a/shell/src/lib/openApp.ts
++++ b/shell/src/lib/openApp.ts
+@@ -20,6 +20,15 @@ export async function openWindowView(w: WindowEntry): Promise<void> {
+   showAppView({ kind: "window", address: w.address, title: w.title || w.class });
+ }
+ 
++
++/** Pick a frame URL that shares a host with the current shell, so the door cookie is first-party. */
++function resolveWebUrl(a: AppEntry): string | undefined {
++  const host = window.location.hostname;
++  const loop = host === "127.0.0.1" || host === "localhost";
++  if (loop && a.localFrameUrl) return a.localFrameUrl;
++  return a.frameUrl ?? a.url;
++}
++
+ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error" | "info") => void): Promise<void> {
+   // Explicit new-tab apps (API-only, blocked framing, etc.)
+   if (a.provider === "web" && a.openIn === "tab" && a.url) {
+@@ -28,7 +37,10 @@ export async function openApp(a: AppEntry, toast?: (m: string, k?: "ok" | "error
+   }
+ 
+   // Prefer the REAL full web app inside NODE (fullscreen iframe).
+-  const web = a.frameUrl ?? a.url;
++  // On loopback, use the local frame-proxy port so door_session (host-only on
++  // 127.0.0.1) is sent; the Tailscale :servePort URL is a different host and
++  // was returning "Sign in to NODE first."
++  const web = resolveWebUrl(a);
+   if (web && a.provider === "web") {
+     return showAppView({ kind: "web", url: web, title: a.name });
+   }
+diff --git a/shell/src/lib/tv.ts b/shell/src/lib/tv.ts
+index 5046d33..141c7c5 100644
+--- a/shell/src/lib/tv.ts
++++ b/shell/src/lib/tv.ts
+@@ -10,7 +10,48 @@ export function detectTv(): boolean {
+   return noPointer && window.innerWidth >= 1280;
+ }
+ 
++/**
++ * In TV/kiosk Chrome, window.open and target=_blank create a *second OS
++ * window* (there is no tab strip). That window sits on top of the kiosk and
++ * covers part of the screen, so the cursor hits the front window and the
++ * NODE UI underneath is unclickable. Keep those navigations inside this
++ * window via the in-app viewer.
++ */
++let popupsGuarded = false;
++function guardTvPopups(): void {
++  if (popupsGuarded) return;
++  popupsGuarded = true;
++  const nativeOpen = window.open.bind(window);
++  window.open = ((url?: string | URL, target?: string, features?: string) => {
++    if (!document.documentElement.classList.contains("tv")) {
++      return nativeOpen(url, target, features);
++    }
++    const href = url == null ? "" : String(url);
++    if (href && href !== "about:blank") {
++      window.dispatchEvent(
++        new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: href } }),
++      );
++    }
++    return window;
++  }) as typeof window.open;
++  document.addEventListener(
++    "click",
++    (e) => {
++      if (!document.documentElement.classList.contains("tv")) return;
++      const a = (e.target as Element | null)?.closest?.("a[target='_blank']") as HTMLAnchorElement | null;
++      if (!a?.href) return;
++      e.preventDefault();
++      e.stopPropagation();
++      window.dispatchEvent(
++        new CustomEvent("node:app-view", { detail: { kind: "web", url: a.href, title: a.textContent?.trim() || a.href } }),
++      );
++    },
++    true,
++  );
++}
++
+ export function applyTv(on: boolean, scale = 1): void {
+   document.documentElement.classList.toggle("tv", on);
+-  document.documentElement.style.setProperty("--ui-scale", String(on ? scale : scale));
++  document.documentElement.style.setProperty("--ui-scale", String(scale));
++  if (on) guardTvPopups();
+ }

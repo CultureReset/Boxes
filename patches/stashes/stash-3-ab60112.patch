@@ -1,0 +1,45 @@
+diff --git a/daemon/src/index.ts b/daemon/src/index.ts
+index 96caaa9..1ae3b1e 100644
+--- a/daemon/src/index.ts
++++ b/daemon/src/index.ts
+@@ -115,6 +115,40 @@ api.post("/api/ask", ({ body }) => answer(str(obj(body).text, "text", { max: 500
+  * The key must exist in the registry. An unknown key is a 404, not an attempt
+  * to be helpful — the static allowlist is the whole point.
+  */
++/**
++ * Every capability, described the way a model expects tools to be described.
++ *
++ * This is what turns a chat window into something with hands. The model is
++ * handed this list, picks one, and the answer comes back through
++ * /api/capability — which validates against the same static registry. A model
++ * cannot invent a capability that isn't here.
++ *
++ * `agentSafe: false` capabilities are left out entirely. Installing software
++ * and texting a human are things a person asks for, not things a reasoner
++ * decides. Absence from this list is the enforcement.
++ */
++api.get("/api/tools", () => ({
++  tools: CAPABILITIES
++    .filter((c) => c.agentSafe !== false)
++    .map((c) => ({
++      type: "function" as const,
++      function: {
++        name: c.key.replace(/\./g, "_"),   // most models dislike dots in names
++        description: `${c.summary} Say it like: ${c.phrases.slice(0, 3).join(", ")}`,
++        parameters: {
++          type: "object",
++          properties: Object.fromEntries(
++            Object.entries(c.slots ?? {}).map(([slot, kind]) => [
++              slot,
++              { type: kind === "number" ? "number" : "string", description: `${slot} (${kind})` },
++            ]),
++          ),
++          required: [],
++        },
++      },
++    })),
++}));
++
+ api.post("/api/capability", async ({ body }) => {
+   const b = obj(body);
+   const key = str(b.key, "key", { max: 100 });
