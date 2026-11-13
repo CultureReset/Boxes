@@ -1,0 +1,112 @@
+{
+  "TCP": {
+    "10000": {
+      "HTTPS": true
+    },
+    "12443": {
+      "HTTPS": true
+    },
+    "13443": {
+      "HTTPS": true
+    },
+    "14443": {
+      "HTTPS": true
+    },
+    "16443": {
+      "HTTPS": true
+    },
+    "17790": {
+      "HTTPS": true
+    },
+    "4443": {
+      "HTTPS": true
+    },
+    "7443": {
+      "HTTPS": true
+    },
+    "8443": {
+      "HTTPS": true
+    }
+  },
+  "Web": {
+    "steve-ms-7c02.tail1af4f2.ts.net:10000": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:7700"
+        },
+        "/tunnel": {
+          "Proxy": "http://127.0.0.1:7710"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:12443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:11235"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:13443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:8080"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:14443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:7770"
+        },
+        "/approvals": {
+          "Proxy": "http://127.0.0.1:7795"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:16443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:2586"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:17790": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:7790"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:4443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:4533"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:7443": {
+      "Handlers": {
+        "/": {
+          "Proxy": "http://127.0.0.1:17808"
+        }
+      }
+    },
+    "steve-ms-7c02.tail1af4f2.ts.net:8443": {
+      "Handlers": {
+        "/inbound": {
+          "Proxy": "http://127.0.0.1:8787/inbound"
+        },
+        "/send": {
+          "Proxy": "http://127.0.0.1:8787/send"
+        },
+        "/sms-hook": {
+          "Proxy": "http://127.0.0.1:8787/sms-hook"
+        }
+      }
+    }
+  },
+  "AllowFunnel": {
+    "steve-ms-7c02.tail1af4f2.ts.net:10000": true,
+    "steve-ms-7c02.tail1af4f2.ts.net:8443": true
+  }
+}
