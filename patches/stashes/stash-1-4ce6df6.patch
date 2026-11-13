@@ -1,0 +1,312 @@
+diff --git a/config/frames.json b/config/frames.json
+index 0d5c541..39a79a4 100644
+--- a/config/frames.json
++++ b/config/frames.json
+@@ -134,5 +134,19 @@
+   "localPort": 17819,
+   "servePort": 41443,
+   "path": "/"
++ },
++ {
++  "slug": "minidlna",
++  "upstream": "http://100.104.20.101:8200/",
++  "localPort": 17820,
++  "servePort": 21443,
++  "path": "/"
++ },
++ {
++  "slug": "mcp",
++  "upstream": "https://hub.voicecommandapi.com/",
++  "localPort": 17821,
++  "servePort": 22443,
++  "path": "/"
+  }
+ ]
+diff --git a/daemon/src/modules/providers/linux.ts b/daemon/src/modules/providers/linux.ts
+index 7621dd9..45f8413 100644
+--- a/daemon/src/modules/providers/linux.ts
++++ b/daemon/src/modules/providers/linux.ts
+@@ -1,6 +1,8 @@
+ import { readdir, readFile } from "node:fs/promises";
+ import path from "node:path";
+ import { has, launchDetached, run } from "../../exec.js";
++import { displayEnv, uiDisplay } from "../../xdisplay.js";
++import { ensureClaudeUiProfile, placeDesktopAppWindow } from "../../desktop-window.js";
+ import { HOME } from "../../paths.js";
+ import { demoApps } from "../../demo.js";
+ import { isDemo } from "../status.js";
+@@ -122,12 +124,28 @@ export const linuxProvider: AppProvider = {
+     const app = (await scan()).find((a) => a.id === qualify("linux", localId));
+     if (!app) return { ok: false, message: "App not found" };
+     if (await isDemo()) return { ok: true, message: `Would open ${app.name}` };
++    const env = displayEnv(await uiDisplay());
++    // Claude Desktop is single-instance and already running on the portrait
++    // xrdp display. A normal launch just raises that 816px window, which NODE
++    // then streams as a mobile layout. Use a separate profile on the
++    // landscape UI display and size the window for a desktop view.
++    if (localId === "com.anthropic.Claude") {
++      const profile = ensureClaudeUiProfile();
++      const ok = launchDetached("claude-desktop", [`--user-data-dir=${profile}`], undefined, env);
++      if (ok) void placeDesktopAppWindow(env.DISPLAY ?? ":0", "com.anthropic.Claude");
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    }
+     if (app.desktopFile && (await has("uwsm-app"))) {
+-      return launchDetached("uwsm-app", ["--", `${localId}.desktop`]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++      const ok = launchDetached("uwsm-app", ["--", `${localId}.desktop`], undefined, env);
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    }
++    if (await has("gtk-launch")) {
++      const ok = launchDetached("gtk-launch", [localId], undefined, env);
++      return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+     }
+-    if (await has("gtk-launch")) return launchDetached("gtk-launch", [localId]) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+     const parts = app.exec.replace(/%[a-zA-Z]/g, "").trim().split(/\s+/);
+-    return launchDetached(parts[0], parts.slice(1)) ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
++    const ok = launchDetached(parts[0], parts.slice(1), undefined, env);
++    return ok ? { ok: true, message: `Opening ${app.name}` } : { ok: false, message: "Launch failed" };
+   },
+   async remove(localId) {
+     const app = (await scan()).find((a) => a.id === qualify("linux", localId));
+diff --git a/daemon/src/modules/windows.ts b/daemon/src/modules/windows.ts
+index 3658157..9aa0858 100644
+--- a/daemon/src/modules/windows.ts
++++ b/daemon/src/modules/windows.ts
+@@ -1,6 +1,7 @@
+ import net from "node:net";
+ import path from "node:path";
+ import { has, run } from "../exec.js";
++import { displayEnv, uiDisplay } from "../xdisplay.js";
+ import { bus } from "../events.js";
+ import { demoWindows } from "../demo.js";
+ import { isDemo } from "./status.js";
+@@ -24,8 +25,9 @@ interface HyprClient {
+ export async function listWindows(): Promise<WindowEntry[]> {
+   if (await isDemo()) return demoWindows;
+   if (!(await has("hyprctl")) && await has("wmctrl")) {
+-    const r = await run("wmctrl", ["-lpGx"]);
+-    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";
++    const env = displayEnv(await uiDisplay());
++    const r = await run("wmctrl", ["-lpGx"], { env });
++    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"], { env })).stdout.trim() : "";
+     const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";
+     const out: WindowEntry[] = [];
+     // Two things were broken here and they stopped the whole daemon compiling.
+@@ -72,14 +74,14 @@ export async function listWindows(): Promise<WindowEntry[]> {
+ 
+ export async function focusWindow(address: string): Promise<boolean> {
+   if (await isDemo()) return true;
+-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address])).ok;
++  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address], { env: displayEnv(await uiDisplay()) })).ok;
+   const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
+   return r.ok;
+ }
+ 
+ export async function closeWindow(address: string): Promise<boolean> {
+   if (await isDemo()) return true;
+-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address])).ok;
++  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address], { env: displayEnv(await uiDisplay()) })).ok;
+   const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
+   return r.ok;
+ }
+@@ -88,7 +90,7 @@ export async function closeWindow(address: string): Promise<boolean> {
+ export async function goHome(): Promise<boolean> {
+   if (await isDemo()) return true;
+   if (!(await has("hyprctl")) && await has("wmctrl")) {
+-    const r = await run("wmctrl", ["-xa", SHELL_CLASS]);
++    const r = await run("wmctrl", ["-xa", SHELL_CLASS], { env: displayEnv(await uiDisplay()) });
+     return r.ok;
+   }
+   const r = await run("hyprctl", ["dispatch", "focuswindow", `class:${SHELL_CLASS}`]);
+diff --git a/daemon/src/winstream.ts b/daemon/src/winstream.ts
+index e6e8b65..2599edf 100644
+--- a/daemon/src/winstream.ts
++++ b/daemon/src/winstream.ts
+@@ -1,15 +1,17 @@
+ import type http from "node:http";
+ import { spawn } from "node:child_process";
++import { displayEnv, uiDisplay } from "./xdisplay.js";
+ 
+ /**
+  * Live view of one desktop window as MJPEG (multipart/x-mixed-replace), so the
+  * NODE app can show a desktop program inside its own in-app view. View only.
+- * Captures with xwd | convert on the box's X display (:10 under xrdp).
++ * Captures with xwd | convert on the UI display (the landscape seat, usually
++ * :0), not a portrait xrdp session that made apps look mobile.
+  */
+-function grab(address: string): Promise<Buffer | null> {
++function grab(address: string, display: string): Promise<Buffer | null> {
+   return new Promise((resolve) => {
+-    const env = { ...process.env, DISPLAY: process.env.DISPLAY ?? ":10.0" };
+-    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1280x1280>' -quality 60 jpg:-`, address], { env });
++    const env = displayEnv(display);
++    const p = spawn("sh", ["-c", `xwd -silent -id "$0" | convert xwd:- -resize '1920x1920>' -quality 60 jpg:-`, address], { env });
+     const chunks: Buffer[] = [];
+     const t = setTimeout(() => p.kill("SIGKILL"), 4000);
+     p.stdout.on("data", (c: Buffer) => chunks.push(c));
+@@ -23,8 +25,9 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
+   const address = u.searchParams.get("address") ?? "";
+   const once = u.searchParams.get("once") === "1";
+   if (!/^0x[0-9a-f]{1,10}$/i.test(address)) { res.writeHead(400); res.end("bad address"); return; }
++  const display = u.searchParams.get("display") || await uiDisplay();
+   if (once) {
+-    const f = await grab(address);
++    const f = await grab(address, display);
+     if (!f) { res.writeHead(404); res.end("window not available"); return; }
+     res.writeHead(200, { "content-type": "image/jpeg", "cache-control": "no-store" });
+     res.end(f); return;
+@@ -36,7 +39,7 @@ export async function streamWindow(req: http.IncomingMessage, res: http.ServerRe
+   let misses = 0;
+   while (alive && misses < 10) {
+     const t0 = Date.now();
+-    const f = await grab(address);
++    const f = await grab(address, display);
+     if (!f) misses++; else {
+       misses = 0;
+       res.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${f.length}\r\n\r\n`);
+diff --git a/shell/public/sw.js b/shell/public/sw.js
+index fbfdebe..0f3dc64 100644
+--- a/shell/public/sw.js
++++ b/shell/public/sw.js
+@@ -2,7 +2,7 @@
+  * - /api/* is NEVER intercepted or cached: it always goes over the network to the desktop.
+  * - Navigations: served from cache instantly, refreshed in the background.
+  * - Static assets (hashed /assets/*, icons, manifest): cache-first. */
+-const CACHE = "node-shell-v5";
++const CACHE = "node-shell-v6";
+ const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
+ 
+ self.addEventListener("install", (e) => {
+diff --git a/shell/src/components/AppView.tsx b/shell/src/components/AppView.tsx
+index b69cce8..77d6201 100644
+--- a/shell/src/components/AppView.tsx
++++ b/shell/src/components/AppView.tsx
+@@ -165,28 +165,66 @@ export function AppView() {
+         })}
+       </div>
+ 
++      {/*
++        Visual pill stays iPhone-sized (134×5). The click/swipe target is a
++        full-width 48px bar above the iframe: a 5px button is unhit-able, and
++        CSS box-shadow does not enlarge the hit area. A focused cross-origin
++        iframe also swallows Escape, so this bar is the reliable way home.
++      */}
+       <button
+         type="button"
+         aria-label="Return to NODE"
+         title="Return to NODE"
+         onClick={goHome}
+         onContextMenu={(e) => { e.preventDefault(); setSwitcher((s) => !s); }}
++        onPointerDown={(e) => {
++          if (e.button !== 0) return;
++          const el = e.currentTarget;
++          el.setPointerCapture(e.pointerId);
++          const startY = e.clientY;
++          const startX = e.clientX;
++          const finish = (ev: PointerEvent) => {
++            el.removeEventListener("pointerup", finish);
++            el.removeEventListener("pointercancel", finish);
++            try { el.releasePointerCapture(ev.pointerId); } catch { /* already released */ }
++            const dy = startY - ev.clientY;
++            const dx = Math.abs(ev.clientX - startX);
++            if (dy >= 40 && dy > dx) goHome();
++          };
++          el.addEventListener("pointerup", finish);
++          el.addEventListener("pointercancel", finish);
++        }}
+         style={{
+           position: "absolute",
+-          bottom: "calc(env(safe-area-inset-bottom) + 8px)",
+-          left: "50%",
+-          transform: "translateX(-50%)",
+-          width: 134,
+-          height: 5,
+-          borderRadius: 3,
++          bottom: 0,
++          left: 0,
++          right: 0,
++          height: "calc(env(safe-area-inset-bottom) + 48px)",
++          boxSizing: "border-box",
+           border: 0,
++          margin: 0,
+           padding: 0,
+-          background: "rgba(255,255,255,0.5)",
+-          boxShadow: "0 0 0 6px transparent",
++          paddingBottom: "calc(env(safe-area-inset-bottom) + 8px)",
++          background: "transparent",
+           zIndex: 4,
+           cursor: "pointer",
++          display: "flex",
++          alignItems: "flex-end",
++          justifyContent: "center",
+         }}
+-      />
++      >
++        <span
++          aria-hidden="true"
++          style={{
++            width: 134,
++            height: 5,
++            borderRadius: 3,
++            background: "rgba(255,255,255,0.55)",
++            pointerEvents: "none",
++            display: "block",
++          }}
++        />
++      </button>
+     </div>
+   );
+ }
+diff --git a/shell/src/lib/tv.ts b/shell/src/lib/tv.ts
+index 5046d33..141c7c5 100644
+--- a/shell/src/lib/tv.ts
++++ b/shell/src/lib/tv.ts
+@@ -10,7 +10,48 @@ export function detectTv(): boolean {
+   return noPointer && window.innerWidth >= 1280;
+ }
+ 
++/**
++ * In TV/kiosk Chrome, window.open and target=_blank create a *second OS
++ * window* (there is no tab strip). That window sits on top of the kiosk and
++ * covers part of the screen, so the cursor hits the front window and the
++ * NODE UI underneath is unclickable. Keep those navigations inside this
++ * window via the in-app viewer.
++ */
++let popupsGuarded = false;
++function guardTvPopups(): void {
++  if (popupsGuarded) return;
++  popupsGuarded = true;
++  const nativeOpen = window.open.bind(window);
++  window.open = ((url?: string | URL, target?: string, features?: string) => {
++    if (!document.documentElement.classList.contains("tv")) {
++      return nativeOpen(url, target, features);
++    }
++    const href = url == null ? "" : String(url);
++    if (href && href !== "about:blank") {
++      window.dispatchEvent(
++        new CustomEvent("node:app-view", { detail: { kind: "web", url: href, title: href } }),
++      );
++    }
++    return window;
++  }) as typeof window.open;
++  document.addEventListener(
++    "click",
++    (e) => {
++      if (!document.documentElement.classList.contains("tv")) return;
++      const a = (e.target as Element | null)?.closest?.("a[target='_blank']") as HTMLAnchorElement | null;
++      if (!a?.href) return;
++      e.preventDefault();
++      e.stopPropagation();
++      window.dispatchEvent(
++        new CustomEvent("node:app-view", { detail: { kind: "web", url: a.href, title: a.textContent?.trim() || a.href } }),
++      );
++    },
++    true,
++  );
++}
++
+ export function applyTv(on: boolean, scale = 1): void {
+   document.documentElement.classList.toggle("tv", on);
+-  document.documentElement.style.setProperty("--ui-scale", String(on ? scale : scale));
++  document.documentElement.style.setProperty("--ui-scale", String(scale));
++  if (on) guardTvPopups();
+ }
