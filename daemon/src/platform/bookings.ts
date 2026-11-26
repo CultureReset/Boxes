@@ -28,23 +28,40 @@ const pick = (o: Record<string, unknown>, ...keys: string[]): string => {
   return "";
 };
 
-function toEvent(raw: unknown, kind: keyof typeof COLOUR): CalendarEvent | null {
+/** A clock time, as opposed to a date-only lodging stay. Checked before any Date conversion. */
+function hasClock(value: string): boolean {
+  const v = value.trim();
+  return /(?:T|\s)\d{1,2}:\d{2}/.test(v) || /^\d{1,2}:\d{2}/.test(v);
+}
+
+/**
+ * ISO string, or null when the value is not a real date.
+ * `new Date(bad).toISOString()` throws RangeError — that must not escape a row.
+ */
+function toIso(value: string): string | null {
+  const parsed = Date.parse(value);
+  if (!Number.isFinite(parsed)) return null;
+  return new Date(parsed).toISOString();
+}
+
+export function toEvent(raw: unknown, kind: keyof typeof COLOUR): CalendarEvent | null {
   if (!raw || typeof raw !== "object") return null;
   const r = raw as Record<string, unknown>;
 
-  const start = pick(r, "start_time", "starts_at", "start", "date", "start_date", "booking_date");
+  const start = pick(r, "start_time", "starts_at", "start", "date", "start_date", "booking_date", "check_in", "check_in_date", "arrival_date");
   if (!start) return null;
-  const startIso = new Date(start).toISOString();
-  if (Number.isNaN(Date.parse(startIso))) return null;
+  const startIso = toIso(start);
+  if (!startIso) return null;
 
-  const rawEnd = pick(r, "end_time", "ends_at", "end", "end_date");
+  const rawEnd = pick(r, "end_time", "ends_at", "end", "end_date", "check_out", "check_out_date");
   const durMin = Number(pick(r, "duration_minutes", "duration")) || 0;
-  const endIso = rawEnd
-    ? new Date(rawEnd).toISOString()
-    : new Date(Date.parse(startIso) + (durMin || 60) * 60_000).toISOString();
+  const allDay = !hasClock(start);
+  // A bad end date is this row's problem. Fall back to a duration (or one day
+  // for a date-only stay) instead of throwing and dropping the calendar.
+  const endIso = (rawEnd && toIso(rawEnd)) || new Date(Date.parse(startIso) + (allDay ? 86_400_000 : (durMin || 60) * 60_000)).toISOString();
 
   const who = pick(r, "customer_name", "guest_name", "name", "title", "product_name");
-  const party = pick(r, "party_size", "guests", "seats", "quantity");
+  const party = pick(r, "party_size", "guests", "guest_count", "seats", "quantity");
   const title = kind === "booking" ? [who || "Booking", party ? `(${party})` : ""].filter(Boolean).join(" ") : who || "Event";
 
   return {
@@ -52,8 +69,8 @@ function toEvent(raw: unknown, kind: keyof typeof COLOUR): CalendarEvent | null 
     title: title.slice(0, 200),
     start: startIso,
     end: endIso,
-    allDay: !/T\d\d:/.test(start),
-    location: pick(r, "location", "meeting_point", "resource_name") || undefined,
+    allDay,
+    location: pick(r, "location", "meeting_point", "resource_name", "room_name") || undefined,
     notes: pick(r, "notes", "status", "confirmation_id") || undefined,
     color: COLOUR[kind],
   };
@@ -84,20 +101,45 @@ export async function platformEvents(from: string, to: string): Promise<Calendar
     if (res.status !== "fulfilled") return;
     const kind = sources[i][1];
     for (const r of rows(res.value)) {
-      const ev = toEvent(r, kind);
-      if (ev) out.push(ev);
+      try {
+        const ev = toEvent(r, kind);
+        if (ev) out.push(ev);
+      } catch (err) {
+        // One bad row must not abort the rest of this source, or the sources after it.
+        console.error("calendar: skipped a malformed booking:", (err as Error).message);
+      }
     }
   });
   return out;
 }
 
-/** True when at least one source answered. Lets the screen say "offline" honestly. */
+/** The platform answered. A network failure (status 0) and "not connected" did not. */
+function answered(e: unknown): boolean {
+  return !(e instanceof NotConnected) && !(e instanceof PlatformError && e.status === 0);
+}
+
+/**
+ * True when the platform answered. Lets the screen say "offline" honestly.
+ *
+ * `/api/health` is the real check. On the unmerged gcr-api-clean deploy that
+ * route 404s, so a 404 falls through to `GET /` rather than reporting the
+ * platform down before the API is deployed. Any other answer — including a
+ * 500 — means we reached it.
+ */
 export async function platformReachable(): Promise<boolean> {
   if (!(await isConnected())) return false;
   try {
     await platform.get("/api/health");
     return true;
   } catch (e) {
-    return !(e instanceof NotConnected) && !(e instanceof PlatformError && e.status === 0);
+    if (e instanceof PlatformError && e.status === 404) {
+      try {
+        await platform.get("/");
+        return true;
+      } catch (e2) {
+        return answered(e2);
+      }
+    }
+    return answered(e);
   }
 }

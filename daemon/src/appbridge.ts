@@ -55,26 +55,55 @@ const TOOL = {
  * task.created. A task whose title starts with "Ask Paperclip" is sent to Lead;
  * Lead's answer is written back into the task and the task is marked done.
  */
-const TWENTY = process.env.NODEOS_TWENTY_URL ?? "http://127.0.0.1:3000";
-const TWENTY_KEY_FILE = path.join(os.homedir(), ".config/nodeos/twenty-api-key");
+function twentyBase(): string {
+  return (process.env.NODEOS_TWENTY_URL ?? "http://127.0.0.1:3000").replace(/\/$/, "");
+}
+function twentyKeyFile(): string {
+  return process.env.NODEOS_TWENTY_KEY_FILE ?? path.join(os.homedir(), ".config/nodeos/twenty-api-key");
+}
 const seenNonces = new Set<string>();
 
-async function twentyPatchTask(id: string, data: Record<string, unknown>): Promise<void> {
-  const key = readFileSync(TWENTY_KEY_FILE, "utf8").trim();
-  await fetch(`${TWENTY}/rest/tasks/${id}`, { method: "PATCH", headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" }, body: JSON.stringify(data), signal: AbortSignal.timeout(15_000) });
+/** Write a task back to Twenty. A non-2xx response is a failure, not a success we swallow. */
+export async function twentyPatchTask(id: string, data: Record<string, unknown>): Promise<void> {
+  let key: string;
+  try {
+    key = readFileSync(twentyKeyFile(), "utf8").trim();
+  } catch (e) {
+    const message = `Twenty writeback failed for task ${id}: API key unreadable (${(e as Error).message})`;
+    console.error(message);
+    throw new Error(message);
+  }
+  const res = await fetch(`${twentyBase()}/rest/tasks/${id}`, {
+    method: "PATCH",
+    headers: { Authorization: `Bearer ${key}`, "content-type": "application/json" },
+    body: JSON.stringify(data),
+    signal: AbortSignal.timeout(15_000),
+  });
+  const detail = await res.text().catch(() => "");
+  if (!res.ok) {
+    const message = `Twenty writeback failed for task ${id}: HTTP ${res.status}${detail ? ` ${detail.slice(0, 300)}` : ""}`;
+    console.error(message);
+    throw new Error(message);
+  }
 }
 
 async function twentyWebhook(req: http.IncomingMessage, res: http.ServerResponse): Promise<void> {
   const chunks: Buffer[] = [];
   for await (const c of req) chunks.push(c as Buffer);
+  // Sign the raw body. JSON.stringify(parsed) reorders keys and drops whitespace, so a
+  // valid Twenty signature fails whenever the payload is not already in that exact form.
+  const rawBody = Buffer.concat(chunks).toString("utf8");
   let payload: any;
-  try { payload = JSON.parse(Buffer.concat(chunks).toString("utf8")); } catch { return send(res, 400, { error: "bad JSON" }); }
+  try { payload = JSON.parse(rawBody); } catch { return send(res, 400, { error: "bad JSON" }); }
   const ts = String(req.headers["x-twenty-webhook-timestamp"] ?? "");
   const sig = String(req.headers["x-twenty-webhook-signature"] ?? "");
   const nonce = String(req.headers["x-twenty-webhook-nonce"] ?? "");
-  const want = createHmac("sha256", token()).update(`${ts}:${JSON.stringify(payload)}`).digest("hex");
+  const want = createHmac("sha256", token()).update(`${ts}:${rawBody}`).digest("hex");
+  const sigBuf = Buffer.from(sig);
+  const wantBuf = Buffer.from(want);
   const fresh = Math.abs(Date.now() - Number(ts)) < 5 * 60_000;
-  if (!ts || sig.length !== want.length || !timingSafeEqual(Buffer.from(sig), Buffer.from(want)) || !fresh || seenNonces.has(nonce)) return send(res, 401, { error: "bad signature" });
+  // Compare buffers, not string lengths: a non-ASCII signature must 401, not throw.
+  if (!ts || sigBuf.length !== wantBuf.length || !timingSafeEqual(sigBuf, wantBuf) || !fresh || seenNonces.has(nonce)) return send(res, 401, { error: "bad signature" });
   seenNonces.add(nonce); if (seenNonces.size > 500) seenNonces.clear();
   send(res, 200, { ok: true }); // Twenty waits only 5 s; the work continues below.
   const rec = payload?.record ?? {};
