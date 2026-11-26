@@ -72,9 +72,9 @@ export async function runJson<T>(cmd: string, args: string[] = [], opts?: { time
  * Launch a long-lived desktop process detached from the daemon so that
  * closing the daemon never takes user apps down with it.
  */
-export function launchDetached(cmd: string, args: string[] = [], cwd?: string): boolean {
+export function launchDetached(cmd: string, args: string[] = [], cwd?: string, env?: NodeJS.ProcessEnv): boolean {
   try {
-    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: process.env });
+    const child = spawn(cmd, args, { detached: true, stdio: "ignore", cwd, env: env ? { ...process.env, ...env } : process.env });
     child.on("error", () => {});
     child.unref();
     return true;

@@ -1,23 +1,162 @@
-import { useEffect, useMemo, useState } from "react";
-import { ChevronLeft, ExternalLink, Home, LayoutGrid, RotateCw, X } from "lucide-react";
+import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import { Home, Layers, X } from "lucide-react";
 import type { AppViewTarget } from "../lib/openApp";
+import { isLocalDesktopShell } from "../lib/openApp";
 import { NativeApp } from "../native/NativeApp";
+
+/** Live view of a native window, used only on phones/remote (not the local kiosk). */
+function WindowStream({ address, title, n }: { address: string; title: string; n: number }) {
+  const [src, setSrc] = useState(() => `/api/windows/stream?address=${encodeURIComponent(address)}&once=1&n=${n}&t=0`);
+  useEffect(() => {
+    let alive = true;
+    let t = 0;
+    let timer: number | undefined;
+    const bump = () => {
+      if (!alive) return;
+      t += 1;
+      setSrc(`/api/windows/stream?address=${encodeURIComponent(address)}&once=1&n=${n}&t=${t}`);
+      timer = window.setTimeout(bump, 400);
+    };
+    timer = window.setTimeout(bump, 400);
+    return () => { alive = false; if (timer) window.clearTimeout(timer); };
+  }, [address, n]);
+  return (
+    <img
+      alt={title}
+      src={src}
+      style={{ width: "100%", height: "100%", objectFit: "contain", display: "block", background: "#000" }}
+    />
+  );
+}
 
 type Pane = AppViewTarget & { key: string };
 
 function paneKey(t: AppViewTarget): string {
-  if (t.kind === "web") return `web:${t.url}`;
   if (t.kind === "native") return `native:${t.slug}`;
   return `window:${t.address}`;
 }
 
-/** Fullscreen in-app viewer: the REAL web app UI, edge-to-edge, like opening a
- *  phone app. Keep several open and switch; Home returns to the NODE launcher. */
+function useTvShell(): boolean {
+  const [tv, setTv] = useState(() => (typeof document !== "undefined" ? isLocalDesktopShell() : false));
+  useEffect(() => {
+    const sync = () => setTv(isLocalDesktopShell());
+    sync();
+    const obs = new MutationObserver(sync);
+    obs.observe(document.documentElement, { attributes: true, attributeFilter: ["class"] });
+    window.addEventListener("resize", sync);
+    return () => { obs.disconnect(); window.removeEventListener("resize", sync); };
+  }, []);
+  return tv;
+}
+
+/**
+ * Always-visible NODE chrome for a native-app pane.
+ * Sits in the layout flow (not over the stream) so the app cannot cover it,
+ * and so a 5px "home indicator" can never be the only way back.
+ */
+function AppViewChrome({
+  title,
+  tv,
+  onHome,
+  onSwitcher,
+  canSwitch,
+}: {
+  title: string;
+  tv: boolean;
+  onHome: () => void;
+  onSwitcher: () => void;
+  canSwitch: boolean;
+}) {
+  const barH = tv ? 76 : 52;
+  const btnH = tv ? 52 : 40;
+  const font = tv ? 22 : 16;
+  const icon = tv ? 22 : 16;
+  const btn: CSSProperties = {
+    flex: "0 0 auto",
+    minHeight: btnH,
+    minWidth: tv ? 148 : 92,
+    padding: tv ? "0 24px" : "0 14px",
+    borderRadius: 12,
+    border: 0,
+    fontSize: font,
+    fontWeight: 650,
+    cursor: "pointer",
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+  };
+  return (
+    <nav
+      aria-label="NODE navigation"
+      style={{
+        flex: "0 0 auto",
+        minHeight: barH,
+        boxSizing: "border-box",
+        display: "flex",
+        alignItems: "center",
+        gap: tv ? 16 : 10,
+        paddingTop: "env(safe-area-inset-top)",
+        paddingLeft: `max(${tv ? 20 : 12}px, env(safe-area-inset-left))`,
+        paddingRight: `max(${tv ? 20 : 12}px, env(safe-area-inset-right))`,
+        background: "#10161f",
+        borderBottom: "1px solid #243042",
+        color: "#e8eef7",
+        zIndex: 5,
+      }}
+    >
+      <button
+        type="button"
+        aria-label="Return to NODE"
+        title="Return to NODE"
+        onClick={onHome}
+        style={{ ...btn, background: "#0a84ff", color: "#fff" }}
+      >
+        <Home size={icon} />
+        Home
+      </button>
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          fontSize: tv ? 20 : 15,
+          fontWeight: 600,
+          overflow: "hidden",
+          textOverflow: "ellipsis",
+          whiteSpace: "nowrap",
+        }}
+      >
+        {title}
+      </div>
+      {canSwitch && (
+        <button
+          type="button"
+          aria-label="Switch apps"
+          title="Switch apps"
+          onClick={onSwitcher}
+          style={{ ...btn, minWidth: tv ? 128 : 84, background: "#243042", color: "#e8eef7" }}
+        >
+          <Layers size={icon} />
+          Apps
+        </button>
+      )}
+    </nav>
+  );
+}
+
+/**
+ * One native-app pane (window stream or native widget). Web apps never open
+ * here: they are top-level links to their Cloudflare hostname (see
+ * planLaunch). A reserved Home bar is always on screen — TV/kiosk,
+ * Plasma, and phone — so an app can never trap the user with no way back.
+ * Phone Back / Escape also closes the pane. Long-press is no longer the
+ * only switcher: an Apps button appears when more than one pane is open.
+ */
 export function AppView() {
   const [panes, setPanes] = useState<Pane[]>([]);
   const [active, setActive] = useState<string | null>(null);
-  const [reload, setReload] = useState<Record<string, number>>({});
   const [switcher, setSwitcher] = useState(false);
+  const tv = useTvShell();
 
   useEffect(() => {
     const on = (e: Event) => {
@@ -32,10 +171,22 @@ export function AppView() {
   }, []);
 
   useEffect(() => {
+    // TopBar / TabBar navigation must close the app pane so Home, Agents,
+    // and every other screen are reachable. Do not history.back() here —
+    // that would undo the navigation the user just picked.
+    const close = () => {
+      setPanes([]);
+      setActive(null);
+      setSwitcher(false);
+    };
+    window.addEventListener("node:navigate", close);
+    return () => window.removeEventListener("node:navigate", close);
+  }, []);
+
+  useEffect(() => {
     if (!active) return;
     history.pushState({ appView: true }, "");
     const pop = () => {
-      // Phone back: close active pane, or leave viewer when last pane closes.
       setPanes((prev) => {
         const next = prev.filter((p) => p.key !== active);
         setActive(next.length ? next[next.length - 1].key : null);
@@ -47,7 +198,6 @@ export function AppView() {
   }, [active]);
 
   const cur = useMemo(() => panes.find((p) => p.key === active) ?? null, [panes, active]);
-  if (!cur) return null;
 
   const goHome = () => {
     setPanes([]);
@@ -55,91 +205,82 @@ export function AppView() {
     setSwitcher(false);
     if (history.state?.appView) history.back();
   };
-  const closeActive = () => {
-    if (history.state?.appView) history.back();
-    else {
-      setPanes((prev) => {
-        const next = prev.filter((p) => p.key !== cur.key);
-        setActive(next.length ? next[next.length - 1].key : null);
-        return next;
-      });
-    }
-  };
-  const openExternal = () => {
-    if (cur.kind === "web") {
-      if (!window.open(cur.url, "_blank", "noopener")) window.location.href = cur.url;
-    }
-  };
-  const bump = () => setReload((r) => ({ ...r, [cur.key]: (r[cur.key] ?? 0) + 1 }));
-  const n = reload[cur.key] ?? 0;
+
+  useEffect(() => {
+    if (!cur) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        goHome();
+      }
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [cur]);
+
+  if (!cur) return null;
 
   return (
-    <div className="appview" style={{ position: "fixed", inset: 0, zIndex: 900, background: "#0a0d13", display: "flex", flexDirection: "column" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: 6, padding: "calc(env(safe-area-inset-top) + 6px) 8px 6px", background: "#111722", borderBottom: "1px solid #222b38" }}>
-        <button type="button" className="icon-btn" aria-label="Back" onClick={closeActive}><ChevronLeft size={22} /></button>
-        <button type="button" className="icon-btn" aria-label="Home" title="Back to NODE home" onClick={goHome}><Home size={18} /></button>
-        <button type="button" className="icon-btn" aria-label="App switcher" title="Switch apps" onClick={() => setSwitcher((s) => !s)}><LayoutGrid size={18} /></button>
-        <div style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontWeight: 600 }}>{cur.title}</div>
-        {cur.kind === "web" && (
-          <button type="button" className="icon-btn" aria-label="Open in new tab" title="Open in new tab" onClick={openExternal}><ExternalLink size={18} /></button>
-        )}
-        <button type="button" className="icon-btn" aria-label="Reload" onClick={bump}><RotateCw size={18} /></button>
-      </div>
+    <div className="appview" style={{ position: "absolute", inset: 0, zIndex: 4, background: "#10161f", display: "flex", flexDirection: "column" }}>
+      <AppViewChrome
+        title={cur.title}
+        tv={tv}
+        onHome={goHome}
+        onSwitcher={() => setSwitcher((s) => !s)}
+        canSwitch={panes.length > 1}
+      />
 
-      {switcher && (
-        <div style={{ display: "flex", gap: 8, overflowX: "auto", padding: "10px 10px 12px", background: "#0d121b", borderBottom: "1px solid #222b38", WebkitOverflowScrolling: "touch" }}>
-          {panes.map((p) => (
-            <button
-              key={p.key}
-              type="button"
-              onClick={() => { setActive(p.key); setSwitcher(false); }}
-              style={{
-                flex: "0 0 auto", minWidth: 112, maxWidth: 160, height: 64, borderRadius: 14, border: p.key === cur.key ? "2px solid #0a84ff" : "1px solid #2a3545",
-                background: "#151b26", color: "#e8eef7", padding: "8px 10px", textAlign: "left", position: "relative",
-              }}
-            >
-              <div style={{ fontSize: 12, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
-              <div style={{ fontSize: 10, color: "#9aa7b8", marginTop: 4 }}>{p.kind === "web" ? "App" : p.kind}</div>
-              <span
-                role="button"
-                tabIndex={0}
-                aria-label={`Close ${p.title}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setPanes((prev) => {
-                    const next = prev.filter((x) => x.key !== p.key);
-                    if (p.key === cur.key) setActive(next.length ? next[next.length - 1].key : null);
-                    return next;
-                  });
+      <div style={{ flex: 1, position: "relative", overflow: "hidden", minHeight: 0 }}>
+        {switcher && (
+          <div
+            style={{
+              position: "absolute", inset: 0, zIndex: 3, background: "rgba(0,0,0,0.72)",
+              display: "flex", alignItems: "flex-end", justifyContent: "center",
+              padding: "0 16px calc(env(safe-area-inset-bottom) + 36px)", gap: 10,
+              overflowX: "auto", WebkitOverflowScrolling: "touch",
+            }}
+            onClick={() => setSwitcher(false)}
+          >
+            {panes.map((p) => (
+              <button
+                key={p.key}
+                type="button"
+                onClick={(e) => { e.stopPropagation(); setActive(p.key); setSwitcher(false); }}
+                style={{
+                  flex: "0 0 auto", minWidth: 132, maxWidth: 180, height: 88, borderRadius: 18,
+                  border: p.key === cur.key ? "2px solid #0a84ff" : "1px solid #2a3545",
+                  background: "#151b26", color: "#e8eef7", padding: "12px 14px", textAlign: "left", position: "relative",
                 }}
-                style={{ position: "absolute", top: 4, right: 4, width: 22, height: 22, borderRadius: 11, display: "grid", placeItems: "center", background: "#243042" }}
-              ><X size={12} /></span>
-            </button>
-          ))}
-          <button type="button" onClick={goHome} style={{ flex: "0 0 auto", minWidth: 96, height: 64, borderRadius: 14, border: "1px dashed #3a4658", background: "transparent", color: "#9aa7b8" }}>
-            Home
-          </button>
-        </div>
-      )}
-
-      <div style={{ flex: 1, position: "relative", overflow: "hidden" }}>
+              >
+                <div style={{ fontSize: 14, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.title}</div>
+                <div style={{ fontSize: 11, color: "#9aa7b8", marginTop: 6 }}>App</div>
+                <span
+                  role="button"
+                  tabIndex={0}
+                  aria-label={`Close ${p.title}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setPanes((prev) => {
+                      const next = prev.filter((x) => x.key !== p.key);
+                      if (p.key === cur.key) setActive(next.length ? next[next.length - 1].key : null);
+                      return next;
+                    });
+                  }}
+                  style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24, borderRadius: 12, display: "grid", placeItems: "center", background: "#243042" }}
+                ><X size={12} /></span>
+              </button>
+            ))}
+          </div>
+        )}
         {panes.map((p) => {
           const show = p.key === cur.key;
-          const rn = p.key === cur.key ? n : (reload[p.key] ?? 0);
+          const rn = 0;
           return (
-            <div key={p.key} style={{ position: "absolute", inset: 0, display: show ? "block" : "none", background: "#0a0d13" }}>
+            <div key={p.key} style={{ position: "absolute", inset: 0, display: show ? "block" : "none", background: "#000" }}>
               {p.kind === "native" ? (
                 <NativeApp key={rn} slug={p.slug} n={rn} />
-              ) : p.kind === "web" ? (
-                <iframe
-                  key={rn}
-                  src={p.url}
-                  title={p.title}
-                  allow="clipboard-read; clipboard-write; microphone; camera; fullscreen; autoplay; display-capture"
-                  style={{ border: 0, width: "100%", height: "100%", position: "absolute", inset: 0, background: "#fff" }}
-                />
               ) : (
-                <img key={rn} alt={p.title} src={`/api/windows/stream?address=${encodeURIComponent(p.address)}&fps=4&n=${rn}`} style={{ width: "100%", height: "auto", display: "block" }} />
+                <WindowStream key={rn} address={p.address} title={p.title} n={rn} />
               )}
             </div>
           );

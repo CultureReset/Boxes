@@ -44,6 +44,7 @@ export function timeRange(start: string, end: string, allDay: boolean): string {
   if (allDay) return "All day";
   const s = new Date(start);
   const e = new Date(end);
+  if (Number.isNaN(s.getTime()) || Number.isNaN(e.getTime())) return "Time unavailable";
   return `${clock(s)} – ${clock(e)}`;
 }
 

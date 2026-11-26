@@ -20,7 +20,6 @@ export const TEMPLATES: Array<Omit<Automation, "id" | "enabled" | "lastRun" | "l
   { name: "Inventory Watch", description: "Track stock & alerts", icon: "package", kind: "agent", payload: "Look at the inventory spreadsheet in ~/Documents and list items that are running low.", schedule: { type: "daily", time: "08:00" } },
   { name: "Weekly Sales Report", description: "Compile and send report", icon: "bar-chart", kind: "agent", payload: "Compile this week's sales into a short report and save it to ~/Documents/Reports.", schedule: { type: "weekly", weekday: 1, time: "09:00" } },
   { name: "Social Media Scheduler", description: "Plan and publish content", icon: "megaphone", kind: "agent", payload: "Draft three social posts for this week based on what's new in ~/Documents/Marketing.", schedule: { type: "weekly", weekday: 1, time: "15:00" } },
-  { name: "Travel Watch", description: "Monitor flights & prices", icon: "plane", kind: "agent", payload: "Check saved trips in ~/Documents/Travel and report price changes.", schedule: { type: "daily", time: "18:00" } },
   { name: "Invoice Organizer", description: "Sort and file receipts", icon: "file-text", kind: "agent", payload: "Move new receipts from ~/Downloads into ~/Documents/Invoices/<year>/<month> and rename them consistently.", schedule: { type: "daily", time: "21:00" } },
   { name: "Open Music at 9", description: "Start the day with a playlist", icon: "music", kind: "open", payload: "linux:spotify", schedule: { type: "daily", time: "09:00" } },
 ];

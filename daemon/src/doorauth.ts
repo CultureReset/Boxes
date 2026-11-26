@@ -3,6 +3,7 @@ import { createHash, timingSafeEqual } from "node:crypto";
 import { readFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
+import { cfAccessEmail } from "./cfaccess.js";
 
 /** Machine-to-machine: the door's own machine proxy calls this NODE with its app token
  *  (~/.config/nodeos/app-token). Lets a second machine (MacBook, laptop) be plugged into the
@@ -74,10 +75,11 @@ export async function doorUser(req: http.IncomingMessage): Promise<string | null
 /** true = allowed to continue. Otherwise the response was sent. */
 export async function requireDoor(req: http.IncomingMessage, res: http.ServerResponse, framed = false): Promise<boolean> {
   if (!isRemote(req)) return true;
-  // Cloudflare Access already gated the hostname (Matt-only). Trust its identity
-  // header so framed apps on *.voicecommandapi.com don't need a second door login.
-  const cfEmail = req.headers["cf-access-authenticated-user-email"];
-  if (typeof cfEmail === "string" && cfEmail.includes("@")) return true;
+  // Cloudflare Access already gated the hostname (Matt-only). Trust it ONLY when
+  // the signed Cf-Access-Jwt-Assertion verifies (cfaccess.ts). A bare
+  // cf-access-authenticated-user-email header is spoofable via Tailscale serve
+  // and is stripped.
+  if (await cfAccessEmail(req)) return true;
   // n8n production webhooks / forms stay open (Access bypass at the edge).
   const url = req.url ?? "/";
   if (url.startsWith("/webhook") || url.startsWith("/form")) return true;

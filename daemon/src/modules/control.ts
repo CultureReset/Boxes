@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { run } from "../exec.js";
 import { HttpError } from "../router.js";
+import { isCloudflareAccessUrl } from "../cloudflare-access-url.js";
 
 /**
  * Start / stop / restart the services listed in config/services-control.json.
@@ -43,7 +44,9 @@ const FILE = process.env.NODEOS_CONTROL_FILE ?? path.resolve(here, "../../../con
 
 async function entries(): Promise<ControlEntry[]> {
   const j = JSON.parse(await readFile(FILE, "utf8")) as { services: ControlEntry[] };
-  return j.services.filter((s) => (s.kind === "systemd" || s.kind === "docker") && Array.isArray(s.units) && s.units.length > 0);
+  return j.services
+    .filter((s) => (s.kind === "systemd" || s.kind === "docker") && Array.isArray(s.units) && s.units.length > 0)
+    .map((s) => (!s.url || isCloudflareAccessUrl(s.url) ? s : { ...s, url: null }));
 }
 
 async function unitState(kind: ControlEntry["kind"], unit: string): Promise<UnitState> {

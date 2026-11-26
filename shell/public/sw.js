@@ -1,8 +1,9 @@
 /* NODE service worker: the app shell lives on the phone, all work happens on the desktop.
  * - /api/* is NEVER intercepted or cached: it always goes over the network to the desktop.
- * - Navigations: served from cache instantly, refreshed in the background.
+ * - Navigations: NETWORK FIRST (a deploy shows up on the next load); the cached
+ *   shell is only an offline fallback.
  * - Static assets (hashed /assets/*, icons, manifest): cache-first. */
-const CACHE = "node-shell-v5";
+const CACHE = "node-shell-v7"; // bump on every shell change
 const SHELL = ["/", "/manifest.webmanifest", "/favicon.svg", "/icon-192.png", "/icon-512.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (e) => {
@@ -27,8 +28,8 @@ self.addEventListener("fetch", (e) => {
 
   if (req.mode === "navigate") {
     e.respondWith(caches.open(CACHE).then(async (c) => {
-      const cached = await c.match("/");
-      const fresh = fetch(req).then(async (r) => {
+      try {
+        const r = await fetch(req, { cache: "no-store" });
         if (r.ok) {
           await c.put("/", r.clone());
           // New deploy: pull in its bundles too.
@@ -36,8 +37,9 @@ self.addEventListener("fetch", (e) => {
           for (const m of html.matchAll(/(?:src|href)="(\/assets\/[^"]+)"/g)) if (!(await c.match(m[1]))) c.add(m[1]).catch(() => {});
         }
         return r;
-      }).catch(() => cached);
-      return cached || fresh;
+      } catch {
+        return (await c.match("/")) || Response.error();
+      }
     }));
     return;
   }

@@ -2,6 +2,7 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { HOME, OMARCHY_PATH } from "../paths.js";
+import { isCloudflareAccessUrl } from "../cloudflare-access-url.js";
 
 /**
  * Web-app suggestions, read from real sources rather than a list typed into
@@ -61,6 +62,7 @@ async function fromOmarchy(): Promise<CatalogEntry[]> {
       const url = exec.match(/https?:\/\/[^\s"']+/)?.[0];
       // Only launchers that open a URL as an app window are web apps.
       if (!url || !/omarchy-launch-webapp|--app=/.test(exec)) continue;
+      if (!isCloudflareAccessUrl(url)) continue;
       const name = text.match(/^Name=(.*)$/m)?.[1]?.trim() ?? f.replace(/\.desktop$/, "");
       const slug = slugify(name);
       if (!slug) continue;
@@ -75,7 +77,7 @@ async function fromFile(): Promise<CatalogEntry[]> {
     const raw = JSON.parse(await readFile(CONFIG_FILE, "utf8")) as Array<Partial<CatalogEntry>>;
     if (!Array.isArray(raw)) return [];
     return raw
-      .filter((e) => e && typeof e.name === "string" && typeof e.url === "string" && /^https?:\/\//.test(e.url))
+      .filter((e) => e && typeof e.name === "string" && typeof e.url === "string" && isCloudflareAccessUrl(e.url))
       .map((e) => ({
         slug: e.slug && /^[a-z0-9-]+$/.test(e.slug) ? e.slug : slugify(e.name!),
         name: e.name!,

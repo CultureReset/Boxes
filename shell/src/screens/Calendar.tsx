@@ -83,10 +83,19 @@ export function Calendar() {
   );
 }
 
-function toLocalInput(iso: string): string {
+function toLocalInput(iso: string | undefined): string {
+  if (!iso) return "";
   const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "";
   const pad = (n: number) => String(n).padStart(2, "0");
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/** A cleared or half-typed date input is not a Date. toISOString() on it throws and takes the editor down. */
+function isoFromInput(value: string): string | undefined {
+  if (!value.trim()) return undefined;
+  const d = new Date(value);
+  return Number.isNaN(d.getTime()) ? undefined : d.toISOString();
 }
 
 function EventEditor({ initial, onClose, onSave, onDelete }: { initial: Partial<CalendarEvent>; onClose: () => void; onSave: (e: Partial<CalendarEvent>) => void; onDelete?: () => void }) {
@@ -97,8 +106,8 @@ function EventEditor({ initial, onClose, onSave, onDelete }: { initial: Partial<
       <div className="field"><label>Title</label><input className="input" autoFocus value={e.title ?? ""} onChange={(ev) => set({ title: ev.target.value })} placeholder="Lunch with Sam" /></div>
       <div className="row" style={{ justifyContent: "space-between", marginBottom: 14 }}><span className="dim">All day</span><Toggle on={Boolean(e.allDay)} onChange={(v) => set({ allDay: v })} /></div>
       <div className="form-row">
-        <div className="field"><label>Starts</label><input type={e.allDay ? "date" : "datetime-local"} className="input" value={e.allDay ? toLocalInput(e.start!).slice(0, 10) : toLocalInput(e.start!)} onChange={(ev) => set({ start: new Date(ev.target.value).toISOString() })} /></div>
-        <div className="field"><label>Ends</label><input type={e.allDay ? "date" : "datetime-local"} className="input" value={e.allDay ? toLocalInput(e.end!).slice(0, 10) : toLocalInput(e.end!)} onChange={(ev) => set({ end: new Date(ev.target.value).toISOString() })} /></div>
+        <div className="field"><label>Starts</label><input type={e.allDay ? "date" : "datetime-local"} className="input" value={e.allDay ? toLocalInput(e.start).slice(0, 10) : toLocalInput(e.start)} onChange={(ev) => { const start = isoFromInput(ev.target.value); if (start) set({ start }); }} /></div>
+        <div className="field"><label>Ends</label><input type={e.allDay ? "date" : "datetime-local"} className="input" value={e.allDay ? toLocalInput(e.end).slice(0, 10) : toLocalInput(e.end)} onChange={(ev) => { const end = isoFromInput(ev.target.value); if (end) set({ end }); }} /></div>
       </div>
       <div className="field"><label>Location</label><div className="search" style={{ height: 42 }}><MapPin size={16} /><input value={e.location ?? ""} onChange={(ev) => set({ location: ev.target.value })} placeholder="Optional" /></div></div>
       <div className="field"><label>Notes</label><textarea className="input" value={e.notes ?? ""} onChange={(ev) => set({ notes: ev.target.value })} /></div>

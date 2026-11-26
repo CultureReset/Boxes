@@ -1,4 +1,4 @@
-import { openApp, openWindowView, showAppView } from "../lib/openApp";
+import { launchHref, openApp, openUrl, openWindowView } from "../lib/openApp";
 import { useMemo } from "react";
 import { Calendar, AppWindow, Bell, BatteryLow, Clock, Zap, Plus, Play, Package, Smartphone, Globe, Usb, Server } from "lucide-react";
 import { api, useApi } from "../api/client";
@@ -75,7 +75,7 @@ export function AttentionRow(_: RowProps) {
     <Section title="Needs Attention" onTitle={() => navigate("settings", "notifications")}>
       {byApp.map(([app, list]) => {
         const a = byId.get(app) ?? (apps ?? []).find((x) => x.name === app);
-        return <ItemCard key={app} icon={<AppIcon icon={a?.icon} name={app} color={a?.color} />} title={app} subtitle={`${list.length} new ${list.length === 1 ? "notification" : "notifications"}`} meta={list[0].title} badge={<Dot state="alert" />} onClick={() => a && launch(a.id)} />;
+        return <ItemCard key={app} icon={<AppIcon icon={a?.icon} name={app} color={a?.color} />} title={app} subtitle={`${list.length} new ${list.length === 1 ? "notification" : "notifications"}`} meta={list[0].title} badge={<Dot state="alert" />} href={a ? launchHref(a) : undefined} onClick={() => a && launch(a.id)} />;
       })}
       {nextEvent && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: nextEvent.color ?? "#ff453a" }}><Calendar size={26} /></span>} title={nextEvent.title} subtitle={Date.parse(nextEvent.start) > Date.now() ? `In ${Math.max(1, Math.round((Date.parse(nextEvent.start) - Date.now()) / 60000))} minutes` : "Happening now"} meta={<><Clock size={12} /> {timeRange(nextEvent.start, nextEvent.end, nextEvent.allDay)} · Calendar</>} onClick={() => navigate("calendar")} />}
       {updates > 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#0a84ff" }}><Package size={26} /></span>} title="Updates ready" subtitle={`${updates} package${updates === 1 ? "" : "s"} can be updated`} meta="Settings · Updates" badge={<Dot state="info" />} onClick={() => navigate("settings", "updates")} />}
@@ -123,7 +123,7 @@ export function AppsRow(_: RowProps) {
       {apps === null && [1, 2, 3, 4].map((i) => <Skeleton key={i} h={92} w={300} />)}
       {list.slice(0, 24).map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment || "App")} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
+        return <ItemCard key={a.id} icon={<AppIcon icon={a.icon} name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment || "App")} meta={<><Dot state={open ? "on" : "off"} /> {open ? "Open" : "Installed"}</>} href={launchHref(a)} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
     </Section>
   );
@@ -140,7 +140,7 @@ export function WebAppsRow(_: RowProps) {
       {kidsMenu.element}
       {list.map((a) => {
         const open = windows?.some((w) => w.appId === a.id);
-        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment)} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
+        return <ItemCard key={a.id} icon={<AppIcon name={a.name} color={a.color} />} title={a.name} subtitle={withParts(a, a.comment)} meta={<><Dot state={open ? "on" : "info"} /> {open ? "Open" : "Web app"}</>} href={launchHref(a)} onClick={() => launch(a.id)} onMore={kidsMenu(a)} />;
       })}
       {apps && list.length === 0 && <ItemCard icon={<span className="app-icon" style={{ ["--ic" as string]: "#0a84ff" }}><Globe size={26} /></span>} title="Add a web app" subtitle="Toast, Facebook, Gmail and more" meta={<Pill><Plus size={11} /> Add</Pill>} onClick={() => navigate("apps", undefined, { filter: "web", add: "1" })} />}
     </Section>
@@ -225,7 +225,7 @@ export function ServicesRow(_: RowProps) {
     void reload();
   };
   const itemsFor = (c: ControlStatus, prefix = "") => [
-    ...(c.url ? [{ label: `${prefix}Open`, onClick: () => showAppView({ kind: "web", url: c.url!, title: c.name }) }] : []),
+    ...(c.url ? [{ label: `${prefix}Open`, onClick: () => openUrl(c.url!) }] : []),
     ...(c.self ? [] : [{ label: `${prefix}Start`, icon: <Play size={14} />, onClick: () => void act(c, "start") }]),
     { label: `${prefix}Restart`, onClick: () => void act(c, "restart") },
     ...(c.self ? [] : [{ label: `${prefix}Stop`, danger: true, onClick: () => void act(c, "stop") }]),
@@ -246,7 +246,7 @@ export function ServicesRow(_: RowProps) {
   const childUnits = new Set((control.data ?? []).filter((c) => c.parent).flatMap((c) => c.units.map((u) => u.replace(/\.service$/, ""))));
   const running = data.services.filter((s) => s.running && !childUnits.has(s.name));
   const down = data.services.filter((s) => !s.running && s.kind === "docker");
-  const open = (url: string) => showAppView({ kind: "web", url, title: new URL(url, location.href).host });
+  const open = (url: string) => openUrl(url);
   const icon = (color: string) => <span className="app-icon" style={{ ["--ic" as string]: color }}><Server size={26} /></span>;
   return (
     <Section title="Running on This Computer">
@@ -275,7 +275,7 @@ export function ServicesRow(_: RowProps) {
       ))}
       {menu.element}
       {linked.map((p) => (
-        <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} onClick={() => open(p.url!)} />
+        <ItemCard key={`p${p.port}`} icon={icon("#30d158")} title={p.process || `Port ${p.port}`} subtitle={`Port ${p.port}`} meta={<><Dot state="on" /> Open</>} href={p.url ?? undefined} onClick={() => open(p.url!)} />
       ))}
       {down.map((s) => (
         <ItemCard key={`d${s.name}`} icon={icon("#ff453a")} title={s.name} subtitle={s.description} meta={<><Dot state="alert" /> {s.state}</>} />

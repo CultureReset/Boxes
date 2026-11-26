@@ -1,6 +1,7 @@
 import net from "node:net";
 import path from "node:path";
 import { has, run } from "../exec.js";
+import { displayEnv, uiDisplay } from "../xdisplay.js";
 import { bus } from "../events.js";
 import { demoWindows } from "../demo.js";
 import { isDemo } from "./status.js";
@@ -24,8 +25,9 @@ interface HyprClient {
 export async function listWindows(): Promise<WindowEntry[]> {
   if (await isDemo()) return demoWindows;
   if (!(await has("hyprctl")) && await has("wmctrl")) {
-    const r = await run("wmctrl", ["-lpGx"]);
-    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"])).stdout.trim() : "";
+    const env = displayEnv(await uiDisplay());
+    const r = await run("wmctrl", ["-lpGx"], { env });
+    const active = (await has("xdotool")) ? (await run("xdotool", ["getactivewindow"], { env })).stdout.trim() : "";
     const activeHex = active ? `0x${Number(active).toString(16).padStart(8, "0")}`.toLowerCase() : "";
     const out: WindowEntry[] = [];
     // Two things were broken here and they stopped the whole daemon compiling.
@@ -72,14 +74,14 @@ export async function listWindows(): Promise<WindowEntry[]> {
 
 export async function focusWindow(address: string): Promise<boolean> {
   if (await isDemo()) return true;
-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address])).ok;
+  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ia", address], { env: displayEnv(await uiDisplay()) })).ok;
   const r = await run("hyprctl", ["dispatch", "focuswindow", `address:${address}`]);
   return r.ok;
 }
 
 export async function closeWindow(address: string): Promise<boolean> {
   if (await isDemo()) return true;
-  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address])).ok;
+  if (!(await has("hyprctl")) && await has("wmctrl")) return (await run("wmctrl", ["-ic", address], { env: displayEnv(await uiDisplay()) })).ok;
   const r = await run("hyprctl", ["dispatch", "closewindow", `address:${address}`]);
   return r.ok;
 }
@@ -88,7 +90,7 @@ export async function closeWindow(address: string): Promise<boolean> {
 export async function goHome(): Promise<boolean> {
   if (await isDemo()) return true;
   if (!(await has("hyprctl")) && await has("wmctrl")) {
-    const r = await run("wmctrl", ["-xa", SHELL_CLASS]);
+    const r = await run("wmctrl", ["-xa", SHELL_CLASS], { env: displayEnv(await uiDisplay()) });
     return r.ok;
   }
   const r = await run("hyprctl", ["dispatch", "focuswindow", `class:${SHELL_CLASS}`]);
