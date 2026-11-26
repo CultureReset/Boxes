@@ -25,6 +25,123 @@ const s = (v: unknown): string => (v === null || v === undefined ? "" : String(v
 
 const DAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
 
+/**
+ * Hours rows come from two schemas. The daemon's own names are weekday / day,
+ * opens / open, closes / close, closed. gcr-api-clean's entity_hours columns
+ * are day_of_week, opens_at, closes_at, is_closed. Numeric days are Sunday = 0,
+ * the same index `weekday` already uses.
+ */
+function dayName(r: unknown): string {
+  const raw = get(r, "weekday") ?? get(r, "day_of_week") ?? get(r, "day");
+  if (typeof raw === "number" && Number.isInteger(raw) && raw >= 0 && raw < DAYS.length) return DAYS[raw];
+  if (typeof raw === "string") {
+    const t = raw.trim();
+    if (/^\d+$/.test(t)) {
+      const n = Number(t);
+      if (n >= 0 && n < DAYS.length) return DAYS[n];
+    }
+    return t;
+  }
+  return "";
+}
+
+function closedFlag(v: unknown): boolean {
+  if (typeof v === "boolean") return v;
+  if (typeof v === "number") return v === 1;
+  if (typeof v === "string") {
+    const t = v.trim().toLowerCase();
+    return t === "true" || t === "t" || t === "yes" || t === "1" || t === "closed";
+  }
+  return false;
+}
+
+function isClosedDay(r: unknown): boolean {
+  const modern = get(r, "is_closed");
+  if (modern !== undefined && modern !== null) return closedFlag(modern);
+  const legacy = get(r, "closed");
+  if (legacy !== undefined && legacy !== null) return closedFlag(legacy);
+  return false;
+}
+
+function tidyTime(v: unknown): string {
+  const raw = s(v).trim();
+  const m = raw.match(/^(\d{1,2}:\d{2})(?::\d{2})?(?:\.\d+)?$/);
+  return m ? m[1] : raw;
+}
+
+function firstText(r: unknown, ...keys: string[]): string {
+  for (const k of keys) {
+    const v = get(r, k);
+    if (v === undefined || v === null) continue;
+    const text = tidyTime(v);
+    if (text) return text;
+  }
+  return "";
+}
+
+function hoursSpan(r: unknown): { open: string; close: string } {
+  return {
+    open: firstText(r, "opens", "open", "opens_at"),
+    close: firstText(r, "closes", "close", "closes_at"),
+  };
+}
+
+function hoursLine(r: unknown): string {
+  const day = dayName(r) || "Day";
+  if (isClosedDay(r)) return `${day}: closed`;
+  const { open, close } = hoursSpan(r);
+  if (!open && !close) return `${day}: hours not on file`;
+  if (!open || !close) return `${day}: ${open || close}`;
+  return `${day}: ${open} to ${close}`;
+}
+
+/** A value that carries a clock, not just a calendar date. */
+function hasClock(v: unknown): boolean {
+  const raw = s(v).trim();
+  if (!raw) return false;
+  return /(?:T|\s)\d{1,2}:\d{2}/.test(raw) || /^\d{1,2}:\d{2}/.test(raw);
+}
+
+function presentClock(v: unknown): string {
+  const raw = s(v).trim();
+  if (/^\d{1,2}:\d{2}/.test(raw)) return tidyTime(raw);
+  return raw.slice(0, 16).replace("T", " ");
+}
+
+/**
+ * Bookings that only carry a date (lodging stays, no start_time / starts_at / time)
+ * are all-day. Inventing a clock from midnight is how "today" used to render a blank time.
+ */
+function bookingMoment(r: unknown): { label: string; allDay: boolean } {
+  const clockRaw = get(r, "start_time") ?? get(r, "starts_at") ?? get(r, "time");
+  if (hasClock(clockRaw)) return { label: presentClock(clockRaw), allDay: false };
+  const dateRaw = (clockRaw !== undefined && clockRaw !== null && s(clockRaw).trim())
+    ? clockRaw
+    : (get(r, "date") ?? get(r, "booking_date") ?? get(r, "start_date") ?? get(r, "check_in") ?? get(r, "check_in_date") ?? get(r, "arrival_date"));
+  if (dateRaw !== undefined && dateRaw !== null && s(dateRaw).trim()) {
+    const day = s(dateRaw).trim().slice(0, 10);
+    return { label: day ? `${day} · all day` : "All day", allDay: true };
+  }
+  return { label: "All day", allDay: true };
+}
+
+function guestName(r: unknown): string {
+  return s(get(r, "customer_name") || get(r, "guest_name") || get(r, "name")).trim() || "booking";
+}
+
+function partySize(r: unknown): unknown {
+  return get(r, "party_size") ?? get(r, "guests") ?? get(r, "guest_count");
+}
+
+/** availability rows: intake writes availability_date / remaining_spots; older rows use date / remaining. */
+function availabilityWhen(r: unknown): string {
+  return s(get(r, "date") || get(r, "availability_date") || get(r, "start_time") || get(r, "starts_at")).trim().slice(0, 16).replace("T", " ");
+}
+
+function spotsLeft(r: unknown): unknown {
+  return get(r, "remaining") ?? get(r, "remaining_spots") ?? get(r, "available") ?? get(r, "seats_left");
+}
+
 const PRESENT: Record<string, (data: unknown) => string[]> = {
   "business.identity": (d) => {
     const name = s(get(d, "name") || get(d, "display_name"));
@@ -35,13 +152,7 @@ const PRESENT: Record<string, (data: unknown) => string[]> = {
   "business.hours.read": (d) => {
     const rows = list(d);
     if (!rows.length) return ["There are no hours on file yet."];
-    return rows.map((r) => {
-      const day = typeof get(r, "weekday") === "number" ? DAYS[get(r, "weekday") as number] : s(get(r, "day"));
-      if (get(r, "closed")) return `${day}: closed`;
-      const open = s(get(r, "opens") ?? get(r, "open"));
-      const close = s(get(r, "closes") ?? get(r, "close"));
-      return `${day}: ${open} to ${close}`;
-    });
+    return rows.map(hoursLine);
   },
 
   "menu.read": (d) => {
@@ -62,10 +173,9 @@ const PRESENT: Record<string, (data: unknown) => string[]> = {
     if (!rows.length) return ["Nothing booked today."];
     const out = [`${rows.length} booking${rows.length === 1 ? "" : "s"} today.`];
     for (const r of rows.slice(0, 10)) {
-      const time = s(get(r, "start_time") || get(r, "starts_at") || get(r, "time")).slice(0, 16).replace("T", " ");
-      const who = s(get(r, "customer_name") || get(r, "name") || "booking");
-      const party = get(r, "party_size") ?? get(r, "guests");
-      out.push(`  ${time} — ${who}${party ? ` (${party})` : ""}`);
+      const when = bookingMoment(r);
+      const party = partySize(r);
+      out.push(`  ${when.label} — ${guestName(r)}${party ? ` (${party})` : ""}`);
     }
     return out;
   },
@@ -77,9 +187,9 @@ const PRESENT: Record<string, (data: unknown) => string[]> = {
     if (!rows.length) return ["Nothing is showing as open in the next seven days."];
     const out: string[] = [];
     for (const r of rows.slice(0, 10)) {
-      const when = s(get(r, "date") || get(r, "start_time")).slice(0, 16).replace("T", " ");
-      const left = get(r, "remaining") ?? get(r, "available") ?? get(r, "seats_left");
-      out.push(`  ${when}${left !== undefined ? ` — ${left} left` : ""}`);
+      const when = availabilityWhen(r);
+      const left = spotsLeft(r);
+      out.push(`  ${when}${left !== undefined && left !== null ? ` — ${left} left` : ""}`);
     }
     return [`${rows.length} opening${rows.length === 1 ? "" : "s"}.`, ...out];
   },
@@ -114,6 +224,12 @@ function fallback(data: unknown): string[] {
   return ["Done."];
 }
 
+/** Screen lines for a capability payload. Presenters invent nothing; they only read what came back. */
+export function presentLines(capability: string | undefined, data: unknown): string[] {
+  const present = (capability && PRESENT[capability]) || fallback;
+  return present(data);
+}
+
 /**
  * Ask the box something.
  *
@@ -126,8 +242,7 @@ export async function answer(sentence: string): Promise<Answer> {
 
   try {
     const data = await match.capability.run({});
-    const present = PRESENT[match.capability.key] ?? fallback;
-    return { lines: present(data), ok: true, capability: match.capability.key, data };
+    return { lines: presentLines(match.capability.key, data), ok: true, capability: match.capability.key, data };
   } catch (e) {
     if (e instanceof NotConnected) {
       return { lines: ["This box is not connected to a business yet. Open Settings and sign in."], ok: false };
@@ -168,18 +283,18 @@ const SPOKEN: Record<string, (data: unknown) => string> = {
   "business.hours.read": (d) => {
     const rows = list(d);
     if (!rows.length) return "There are no hours on file.";
-    const dayOf = (r: unknown) =>
-      typeof get(r, "weekday") === "number" ? DAYS[get(r, "weekday") as number] : s(get(r, "day"));
-    const open = rows.filter((r) => !get(r, "closed"));
-    const shut = rows.filter((r) => get(r, "closed")).map(dayOf).filter(Boolean);
+    const open = rows.filter((r) => !isClosedDay(r));
+    const shut = rows.filter(isClosedDay).map(dayName).filter(Boolean);
 
     if (!open.length) return `Closed ${join(shut)}.`;
 
     // Days that share the same hours are said once.
     const groups = new Map<string, string[]>();
     for (const r of open) {
-      const span = `${s(get(r, "opens"))} to ${s(get(r, "closes"))}`;
-      groups.set(span, [...(groups.get(span) ?? []), dayOf(r)]);
+      const { open: from, close: to } = hoursSpan(r);
+      const span = from && to ? `${from} to ${to}` : from || to || "hours not on file";
+      const name = dayName(r) || "that day";
+      groups.set(span, [...(groups.get(span) ?? []), name]);
     }
     const said = [...groups.entries()].map(([span, days]) => `${join(days)}, ${span}`);
     return [join(said), shut.length ? `Closed ${join(shut)}` : ""].filter(Boolean).join(". ") + ".";
@@ -196,11 +311,21 @@ const SPOKEN: Record<string, (data: unknown) => string> = {
   "bookings.today": (d) => {
     const rows = list(d);
     if (!rows.length) return "Nothing is booked today.";
-    const firstTime = time(get(rows[0], "start_time") || get(rows[0], "starts_at"));
-    if (rows.length === 1) {
-      return `One booking today, ${s(get(rows[0], "customer_name") || get(rows[0], "name"))}${firstTime ? ` at ${firstTime}` : ""}.`;
+    const clockOf = (r: unknown): string => {
+      const raw = get(r, "start_time") ?? get(r, "starts_at") ?? get(r, "time");
+      return hasClock(raw) ? time(raw) : "";
+    };
+    if (rows.every((r) => bookingMoment(r).allDay)) {
+      return rows.length === 1
+        ? `One booking today, ${guestName(rows[0])}, all day.`
+        : `${rows.length} bookings today, all day.`;
     }
-    const lastTime = time(get(rows[rows.length - 1], "start_time") || get(rows[rows.length - 1], "starts_at"));
+    const firstTime = clockOf(rows[0]);
+    if (rows.length === 1) {
+      return `One booking today, ${guestName(rows[0])}${firstTime ? ` at ${firstTime}` : ""}.`;
+    }
+    const last = rows[rows.length - 1];
+    const lastTime = bookingMoment(last).allDay ? "" : clockOf(last);
     return `${rows.length} bookings today${firstTime ? `, starting at ${firstTime}` : ""}${lastTime ? ` and finishing at ${lastTime}` : ""}.`;
   },
 
@@ -212,7 +337,10 @@ const SPOKEN: Record<string, (data: unknown) => string> = {
   "availability.open": (d) => {
     const rows = list(d);
     if (!rows.length) return "Nothing is showing as open in the next week.";
-    const total = rows.reduce<number>((n, r) => n + (Number(get(r, "remaining") ?? get(r, "available") ?? 0) || 0), 0);
+    const total = rows.reduce<number>((n, r) => {
+      const num = Number(spotsLeft(r) ?? 0);
+      return n + (Number.isFinite(num) ? num : 0);
+    }, 0);
     return total
       ? `${rows.length} opening${rows.length === 1 ? "" : "s"}, ${total} space${total === 1 ? "" : "s"} in total.`
       : `${rows.length} opening${rows.length === 1 ? "" : "s"}.`;
